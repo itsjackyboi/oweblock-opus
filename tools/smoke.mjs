@@ -16,6 +16,10 @@ const args = process.argv.slice(2);
 const arg = (k, d) => { const i = args.indexOf(k); return i >= 0 ? args[i + 1] : d; };
 const outDir = path.resolve(arg('--out', path.join(root, 'tools/screens')));
 const port = +arg('--port', 8090);
+const sims = +arg('--sims', 10); // number of ?sim seeds (0 to skip)
+const simSpeed = +arg('--speed', 10);
+const simParallel = +arg('--parallel', 3);
+const only = arg('--only', null); // run a single section by name (e.g. 'sim')
 
 const require = createRequire(path.join(execSync('npm root -g').toString().trim(), '/'));
 const { chromium } = require('playwright');
@@ -327,6 +331,55 @@ try {
     }
     await ctx.close();
   }
+  // 7. AI simulations: a high-tier AI plays; report match length, winner tier, frame cost.
+  if (sims > 0) {
+    const runSim = async (seed) => {
+      const ctx = await browser.newContext({ viewport: { width: 960, height: 540 } });
+      const p = await ctx.newPage();
+      p.on('console', (m) => { if (m.type() === 'error') failures.push(`[sim ${seed}] console.error: ${m.text()}`); });
+      p.on('pageerror', (e) => failures.push(`[sim ${seed}] pageerror: ${e.message}\n${e.stack}`));
+      await p.goto(base + `index.html?debug=1&sim=1&speed=${simSpeed}&seed=${seed}`);
+      try {
+        await p.waitForFunction(() => window.__oweblock && window.__oweblock.result, null, { timeout: (600 / simSpeed + 60) * 1000, polling: 500 });
+      } catch {
+        failures.push(`[sim ${seed}] did not finish`);
+      }
+      if (seed === 1) await shot(p, '13-sim-end.png');
+      const r = await p.evaluate(() => window.__oweblock?.result);
+      await ctx.close();
+      return r;
+    };
+    // A mid-match screenshot at normal speed, with the full field.
+    {
+      const ctx = await browser.newContext({ viewport: { width: 960, height: 540 } });
+      const p = await ctx.newPage();
+      p.on('pageerror', (e) => failures.push(`[sim-shot] pageerror: ${e.message}`));
+      await p.goto(base + 'index.html?debug=1&sim=1&speed=4&seed=11');
+      await p.waitForFunction(() => window.__oweblock?.match?.time > 75, null, { timeout: 60000 });
+      await p.evaluate(() => { window.__oweblock.game.showDebug = false; });
+      await p.waitForTimeout(100);
+      await shot(p, '14-sim-zone.png');
+      await ctx.close();
+    }
+    const seeds = Array.from({ length: sims }, (_, i) => i + 1);
+    const out = [];
+    for (let i = 0; i < seeds.length; i += simParallel) {
+      out.push(...(await Promise.all(seeds.slice(i, i + simParallel).map(runSim))));
+    }
+    results.sims = out.filter(Boolean).map((r) => ({
+      seed: r.seed, duration: r.duration, winner: r.winner, tier: r.winnerTier, kills: r.winnerKills,
+      updAvg: r.perf.updateAvg, updP99: r.perf.updateP99, rndAvg: r.perf.renderAvg, rndP99: r.perf.renderP99,
+    }));
+    const d = results.sims.map((r) => r.duration);
+    if (d.length) {
+      results.simSummary = {
+        minDuration: Math.min(...d), maxDuration: Math.max(...d), avgDuration: +(d.reduce((a, b) => a + b, 0) / d.length).toFixed(1),
+        avgFrameMs: +(results.sims.reduce((a, r) => a + r.updAvg + r.rndAvg, 0) / d.length).toFixed(3),
+        p99FrameMs: +Math.max(...results.sims.map((r) => r.updP99 + r.rndP99)).toFixed(3),
+      };
+    }
+  }
+
 } catch (e) {
   failures.push('runner: ' + (e.stack || e.message));
 } finally {

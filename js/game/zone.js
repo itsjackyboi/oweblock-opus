@@ -41,6 +41,9 @@ export class Zone {
     this._setNext(this.sched.sizes[0]);
     this._rect(1, this.cur);
     this.done = false;
+    const S = this.sched;
+    /** Seconds from match start until the sweep has fully closed. */
+    this.total = (S.safe + S.shrink.reduce((a, b) => a + b, 0) + S.pause.reduce((a, b) => a + b, 0)) * scale;
   }
 
   _rect(s, out) {

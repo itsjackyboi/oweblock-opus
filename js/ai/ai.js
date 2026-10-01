@@ -13,7 +13,7 @@ import { ITEMS } from '../config.js';
 const near = [];
 const tmp = { x: 0, y: 0 };
 const HYSTERESIS = 0.12;
-const ENGAGE_THRESHOLD = 0.3;
+const FIGHT_ROLL = 4; // s between fight-or-not rolls for the same target
 const ROAM_BASE = 160;
 const ROAM_GROWTH = 2; // px per second of match time
 const WHISKER = 11;
@@ -77,6 +77,10 @@ export class AIController {
     this.threat = null;
     this.thirdT = 0;
     this.engaged = false;
+    // Personality: each fighter's appetite for a fight varies around its tier's.
+    this.aggr = this.tier.aggression * rng.range(0.6, 1.3);
+    this.wantFight = false;
+    this.fightRollT = 0;
   }
 
   // ---------------------------------------------------------------- per step
@@ -134,10 +138,20 @@ export class AIController {
     }
     // Retaliate: whoever hurt us recently becomes the target.
     const attacker = f.lastHitBy;
+    // Stray splash from someone else's fight doesn't count: only deliberate attackers (or the player).
     const retaliate = attacker && attacker.alive && !attacker.extra && m.time - f.lastHitTime < 3
+      && (attacker.isPlayer || !attacker.controller || attacker.controller.target === f)
       && Math.hypot(attacker.x - f.x, attacker.y - f.y) < perc * 1.2;
     if (retaliate) best = attacker;
-    if (best && best !== this.target) this.reactT = rng.range(tier.reaction[0], tier.reaction[1]);
+    if (best && best !== this.target) { this.reactT = rng.range(tier.reaction[0], tier.reaction[1]); this.fightRollT = 0; }
+    // Decide per encounter (re-rolled every few seconds) whether to pick a fight.
+    this.fightRollT -= tier.think;
+    const fightChance = () => Math.max(0, Math.min(1, m.fightPressure * (this.aggr / 0.85) * FIGHT_ROLL / Math.max(4, m.aliveCount)));
+    if (!best) this.wantFight = false;
+    else if (this.fightRollT <= 0) {
+      this.fightRollT = FIGHT_ROLL;
+      this.wantFight = rng.chance(fightChance());
+    }
     this.target = best;
     this.targetVisible = !!best && m.map.lineOfSight(f.x, f.y, best.x, best.y);
 
@@ -155,7 +169,13 @@ export class AIController {
             break;
           }
         }
-        if (best) { this.target = best; this.reactT = rng.range(tier.reaction[0], tier.reaction[1]); }
+        // Joining a fight is more tempting than starting one, but still paced by the director.
+        if (best && rng.chance(Math.min(1, fightChance() * 3))) {
+          this.target = best;
+          this.wantFight = true;
+          this.fightRollT = FIGHT_ROLL;
+          this.reactT = rng.range(tier.reaction[0], tier.reaction[1]);
+        } else best = null;
       }
     }
 
@@ -184,10 +204,9 @@ export class AIController {
       ZONE: zoneU,
       // Spontaneous fights need real appetite (aggression ramps up over the match);
       // being hit always gets a response.
-      ENGAGE: tgt ? Math.max(0, tier.aggression * m.aggroRamp * (0.6 + 0.4 * hpFrac) * (armed ? 1 : 0.6) - ENGAGE_THRESHOLD) * 3
-        + (dT < 50 ? 0.15 * m.aggroRamp : 0) + (retaliate ? 0.6 : 0) - (enemiesClose > 2 ? 0.15 : 0)
-        - (dT > tier.perception * 0.7 && !retaliate ? 0.3 : 0) : 0,
-      RETREAT: tgt && hpFrac < 0.35 && tier.kite > 0 ? (0.4 - hpFrac) * 2 + (tgt.hp / tgt.maxHp > hpFrac ? 0.2 : 0) : 0,
+      ENGAGE: tgt ? (this.wantFight ? 0.35 + this.aggr * 0.4 * (0.6 + 0.4 * hpFrac) * (armed ? 1 : 0.6) : 0)
+        + (retaliate ? 0.7 : 0) - (enemiesClose > 2 ? 0.15 : 0) : 0,
+      RETREAT: tgt && hpFrac < 0.35 && tier.kite > 0 && (retaliate || tgt.controller?.target === f) ? (0.4 - hpFrac) * 2 + (tgt.hp / tgt.maxHp > hpFrac ? 0.2 : 0) : 0,
       LOOT: loot ? (armed ? 0.5 : 0.95) - loot.d / 1200 : 0,
       XP: xpCap ? 0.38 : 0,
       ROAM: 0.3,
@@ -201,8 +220,8 @@ export class AIController {
     }
     this.state = st;
     // Only fight when engaged, retaliating, or (sometimes) when an enemy is right on top of us.
-    this.engaged = st === 'ENGAGE' || st === 'RETREAT' || !!retaliate
-      || (tgt && dT < 24 && tier.aggression * m.aggroRamp > 0.45);
+    this.engaged = st === 'ENGAGE' || !!retaliate
+      || (tgt && dT < 24 && this.wantFight);
 
     // --- goals
     if (st === 'ZONE') {

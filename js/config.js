@@ -27,6 +27,8 @@ export const FIGHTER = {
   dashTime: 0.14,
   dashInvuln: 0.18,
   dashCooldown: 1.6,
+  restRegen: 1.5, // hp/s once out of combat
+  restDelay: 5, // s without taking damage before rest regen starts
 };
 
 export const CAMERA = {

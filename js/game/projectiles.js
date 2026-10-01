@@ -60,6 +60,8 @@ export class Projectiles {
   update(dt) {
     const act = this.pool.active;
     for (let i = act.length - 1; i >= 0; i--) {
+      // An orbit can destroy other projectiles mid-loop, shrinking the active list.
+      if (i >= act.length) continue;
       const p = act[i];
       if (!p.alive) continue;
       p.spinA += dt * 18;

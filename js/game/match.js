@@ -26,6 +26,8 @@ import { drawText } from '../ui/font.js';
 const near = [];
 const byY = (a, b) => a.y - b.y;
 const AGGRO_RAMP = 420;
+// start/end are fractions of the safe time and of the whole sweep.
+const PACE = { start: 0.75, end: 1.2, curve: 0.9, slack: 14 };
 
 export class Match {
   /**
@@ -309,6 +311,26 @@ export class Match {
   /** 0.2 at the start -> 1 after AGGRO_RAMP seconds: early game is for looting. */
   get aggroRamp() { return Math.min(1, 0.2 + 0.8 * (this.time / AGGRO_RAMP)); }
 
+  /**
+   * Pacing director: how many contestants "should" be alive at this time
+   * (everyone until most of the safe time is over, easing to ~0 after the sweep closes). AI only starts fights when
+   * more are alive than this; retaliation is always allowed.
+   */
+  get paceTarget() {
+    const start = this.zone.sched.safe * this.zone.scale * PACE.start;
+    const end = this.zone.total * PACE.end;
+    const k = Math.max(0, Math.min(1, (this.time - start) / (end - start)));
+    return this.contestants * (1 - Math.pow(k, PACE.curve));
+  }
+
+  /**
+   * Desired new fights per second, from how far ahead of the pace curve the match is.
+   * Each AI turns this into a per-encounter chance (see ai.js).
+   */
+  get fightPressure() {
+    return Math.max(0, (this.aliveCount - this.paceTarget) / PACE.slack);
+  }
+
   later(t, fn) { this.timers.push({ t, fn }); }
   hitStop(s) { if (!this.sim) this.game.loop.addHitStop(s); }
   shake(t) { if (!this.sim) this.game.renderer.camera.addTrauma(t); }
@@ -351,7 +373,12 @@ export class Match {
       p.placement = 1;
       this.result = this._resultFor(p, true);
     }
-    if (alive <= 1 && !this.simResult) this._finish();
+    // Everyone fell in the same sweep tick: the last to drop is the last one standing.
+    if (alive === 0) {
+      victim.placement = 1;
+      if (victim === p && this.result) this.result = { ...this._resultFor(p, true), placement: 1 };
+    }
+    if (alive <= 1 && !this.simResult) this._finish(alive === 0 ? victim : null);
   }
 
   _resultFor(p, win) {
@@ -365,8 +392,8 @@ export class Match {
     };
   }
 
-  _finish() {
-    const w = this.fighters.find((f) => f.alive && !f.extra) || null;
+  _finish(lastStanding = null) {
+    const w = lastStanding || this.fighters.find((f) => f.alive && !f.extra) || null;
     if (w) w.placement = 1;
     this.simResult = {
       seed: this.seed, mode: this.mode.id, duration: +this.time.toFixed(1),

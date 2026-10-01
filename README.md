@@ -4,7 +4,7 @@ A fast, 8-bit, top-down arena battle royale set in Owe Block (Pintland Isles): y
 
 It is a static site with no build step: `index.html`, plain ES modules, Canvas 2D, WebAudio and `localStorage`.
 
-**Status:** Stage 2 of 6, player combat. It has the held-item model, Bare Knuckles plus 4 weapons (Cutlass, Singing Bow, Ancient Pot, Drifter's Call), XP, the level-up picker, map loot, death and win screens. AI arrives in Stage 3.
+**Status:** Stage 3 of 6, AI. 40 AI fighters in three skill tiers, plus Gobbler's police sweep zone, a minimap and fast AI-only simulations.
 
 ## Run it
 
@@ -43,14 +43,14 @@ All of them are inert unless set.
 | `?placeholders=1` | flat-color placeholders instead of art (still fully playable) |
 | `?debug=1` | debug overlay on, plus `window.__oweblock`: `state`, `perf`, `start({seed})`, `items()`, `give(id, level)`, `levelUp()`, `hurt(n)`, `killAllAI()` |
 | `?dummies=N` | N idle fighters around the player, each holding a random item |
-| `?sim=1&speed=10` | AI-only fast simulation (Stage 3) |
+| `?sim=1&speed=10` | a high-tier AI plays in your place at 10x speed; when one fighter is left, `__oweblock.result` holds the length, winner tier and frame costs |
 
 ## Layout
 
 ```
 js/core/    engine: loop, input, renderer + camera, assets, paper-doll sprites, spatial grid, pools, rng, events
 js/game/    match, fighter, map + collision, shared map-gen tools, controllers
-js/ai/      AI controller and navigation (Stage 3)
+js/ai/      AI controller (utility states, tiers) and navigation (flow field + budgeted A*)
 js/data/    all content: modes, maps, items, fighters, tiers, ...
 js/ui/      bitmap font, HUD, debug overlay, screens
 assets/     manifest.json + Kenney sheets
@@ -84,11 +84,19 @@ The engine never names a specific item, mode or fighter. All content lives in `j
 - Give the item an icon with `icons.<id>` in the manifest, or a 16x16 pixel `glyph` in its entry. Without either, it gets a colored box with its initial.
 - To add it to a mode's loot, put its id in `loot.weights` in `js/data/modes.js`.
 
+## AI and pacing
+
+- Each AI reads its skill from `js/data/tiers.js`. The AI code itself never names a tier.
+- AIs choose between LOOT, ENGAGE, RETREAT, ZONE, XP and ROAM by score, with hysteresis so they don't flicker. Third-party joins happen inside ENGAGE.
+- A pacing director in `match.js` (`paceTarget` and `fightPressure`) only lets AIs *start* fights when more fighters are alive than the curve allows. Fighting back is always allowed.
+- Gobbler's police sweep (`js/game/zone.js`) shrinks from the map edges toward a seeded point. Matches last about 7 minutes.
+
 ## Development
 
 ```sh
 npx eslint js            # lint (flat config in eslint.config.js)
-node tools/smoke.mjs     # Playwright smoke test; screenshots land in tools/screens/
+node tools/smoke.mjs     # Playwright smoke test + 10 AI sims; screenshots land in tools/screens/
+node tools/smoke.mjs --sims 3 --speed 20   # quicker
 ```
 
 `smoke.mjs` starts its own static server under `/oweblock-opus/`, which proves the relative paths work on a Pages subpath. It fails on any console error and blocks `localStorage` in one run.

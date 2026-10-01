@@ -114,7 +114,11 @@ export class Fighter {
 
     updateStatuses(this, dt, dot);
     if (!this.alive) return;
-    if (this.stats.regen > 0 && this.hp < this.maxHp) this.hp = Math.min(this.maxHp, this.hp + this.stats.regen * dt);
+    if (this.hp < this.maxHp) {
+      const rest = match.time - this.lastHitTime > FIGHTER.restDelay ? FIGHTER.restRegen : 0;
+      const r = this.stats.regen + rest;
+      if (r > 0) this.hp = Math.min(this.maxHp, this.hp + r * dt);
+    }
 
     // Aim and facing.
     const ax = it.aimX - this.x;

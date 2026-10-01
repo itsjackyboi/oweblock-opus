@@ -4,7 +4,7 @@
 
 import { Pool } from '../core/pool.js';
 import { POOL_CAPS, ITEMS, XP } from '../config.js';
-import { len } from '../core/math.js';
+import { len, hash2 } from '../core/math.js';
 import { tryAutoPickup } from './items.js';
 import { addXp } from './levelup.js';
 import { drawItemIcon } from '../ui/icons.js';
@@ -31,7 +31,7 @@ export class Pickups {
       if (!p) return null;
     }
     p.kind = kind; p.x = x; p.y = y; p.vx = vx; p.vy = vy;
-    p.item = null; p.value = 0; p.noId = -1; p.noT = 0; p.t = Math.random() * 6; p.target = null;
+    p.item = null; p.value = 0; p.noId = -1; p.noT = 0; p.t = (hash2(x | 0, y | 0, 7) % 600) / 100; p.target = null;
     return p;
   }
 

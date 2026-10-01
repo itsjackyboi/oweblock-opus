@@ -20,7 +20,7 @@ export const MODES = [
       relicShare: 0.06,
       vaultRelicBoost: 6,
     },
-    zone: { scale: 1 },
+    zone: { scale: 1.1 }, // sweep timings x1.1: about 7:15 until it fully closes
     hazards: [],
     music: 'mines',
   },
