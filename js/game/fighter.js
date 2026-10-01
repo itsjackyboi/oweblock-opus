@@ -9,6 +9,7 @@ import { makeStatuses, updateStatuses, moveMul, addStatus, has } from './statuse
 import { dealDamage } from './combat.js';
 import { heldItem, itemMoveMul, chargeFrac } from './items.js';
 import { drawItemIcon } from '../ui/icons.js';
+import { drawText, measure } from '../ui/font.js';
 
 /** Blank intents object; controllers fill it every update. */
 export function makeIntents() {
@@ -34,6 +35,7 @@ export class Fighter {
     this.id = id;
     this.match = opts.match;
     this.name = opts.name || 'FIGHTER';
+    this.fullName = opts.fullName || this.name;
     this.isPlayer = !!opts.isPlayer;
     this.named = !!opts.named;
     this.appearance = opts.appearance;
@@ -73,6 +75,12 @@ export class Fighter {
     this.lastHitItem = null;
     this.diedAt = 0;
     this.placement = 0;
+    this.exposure = 0; // seconds continuously outside the zone
+    this.zoneTick = 0;
+    this.zoneImmune = !!opts.zoneImmune;
+    this.extra = !!opts.extra; // not a battle-royale contestant (police hunters)
+    this.gang = opts.gang || 'grey';
+    this.onDeath = opts.onDeath || null;
 
     this.dashT = 0; // > 0 while dashing
     this.dashCd = 0;
@@ -303,4 +311,25 @@ function drawHeld(ctx, f, item, x, y, assets) {
     ctx.stroke();
     ctx.globalAlpha = 1;
   }
+}
+
+const TAG_COLOR = { red: '#e43b44', blue: '#41a6f6', police: '#8b93af', grey: '#c0cbdc' };
+
+/** Name tag over named fighters (and police hunters). */
+export function drawNameTag(ctx, f, cam) {
+  const x = Math.round(f.x - cam.ox);
+  const y = Math.round(f.y - cam.oy) - 22;
+  if (x < -60 || y < -10 || x > cam.w + 60 || y > cam.h + 10) return;
+  const w = measure(f.name);
+  ctx.globalAlpha = 0.6;
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(x - Math.ceil(w / 2) - 2, y - 1, w + 4, 9);
+  ctx.globalAlpha = 1;
+  drawText(ctx, f.name, x, y, { color: TAG_COLOR[f.gang] || '#ffffff', align: 'center' });
+  // Tiny HP bar under the tag.
+  const hw = Math.max(10, Math.min(30, w));
+  ctx.fillStyle = '#3a1d2a';
+  ctx.fillRect(x - Math.round(hw / 2), y + 9, hw, 1);
+  ctx.fillStyle = '#38b764';
+  ctx.fillRect(x - Math.round(hw / 2), y + 9, Math.round(hw * Math.max(0, f.hp / f.maxHp)), 1);
 }

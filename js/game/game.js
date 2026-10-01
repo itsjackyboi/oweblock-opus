@@ -38,6 +38,7 @@ export class Game {
     this.screen = 'match';
     this.paused = false;
     this.picker = null;
+    this.simReported = false;
   }
 
   update(dt) {
@@ -59,7 +60,11 @@ export class Game {
       if (this.paused) return;
       m.update(dt);
       const p = m.player;
-      if (p.alive && p.pendingLevelUps > 0 && !m.result) {
+      if (m.simResult && !this.simReported) {
+        this.simReported = true;
+        this.onSimEnd?.(m.simResult);
+      }
+      if (p.alive && p.pendingLevelUps > 0 && !m.result && !p.controller.isAI) {
         this.picker = { offers: generateOffers(m, p, m.offerRng), hover: -1 };
         if (!this.picker.offers.length) { p.pendingLevelUps = 0; this.picker = null; }
       }

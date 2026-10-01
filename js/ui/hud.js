@@ -61,13 +61,32 @@ export function drawHud(ctx, match) {
   for (let i = 0; i < feed.length; i++) {
     const e = feed[i];
     ctx.globalAlpha = Math.min(1, (6 - e.t) / 1);
-    const txt = e.killer ? `${e.killer} > ${e.victim}` : `${e.victim} FELL`;
+    const txt = e.text || (e.killer ? `${e.killer} > ${e.victim}` : e.swept ? `${e.victim} SWEPT` : `${e.victim} FELL`);
     drawText(ctx, txt, INTERNAL_W - 6, 30 + i * 9, { color: e.player ? UI.gold : UI.dim, shadow: UI.shadow, align: 'right' });
   }
   ctx.globalAlpha = 1;
 
-  // ---- mode name
-  drawText(ctx, match.mode.name, INTERNAL_W / 2, 6, { color: UI.gold, shadow: UI.shadow, align: 'center' });
+  // ---- zone timer (top-center)
+  const z = match.zone;
+  if (z) {
+    const mmss = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, '0')}`;
+    let label;
+    let col = UI.ink;
+    if (z.state === 'wait' && !z.done) label = `SWEEP IN ${mmss(Math.max(0, z.t))}`;
+    else if (z.state === 'shrink') { label = `SWEEPING ${mmss(Math.max(0, z.t))}`; col = UI.red; }
+    else { label = 'FINAL SWEEP'; col = UI.red; }
+    drawText(ctx, label, INTERNAL_W / 2, 6, { color: col, shadow: UI.shadow, align: 'center' });
+    drawText(ctx, "GOBBLER'S POLICE", INTERNAL_W / 2, 16, { color: UI.dim, shadow: UI.shadow, align: 'center' });
+    if (p.alive && !z.inside(p.x, p.y)) {
+      const blink = Math.floor(match.time * 4) % 2 === 0;
+      drawText(ctx, 'OUTSIDE THE SWEEP!', INTERNAL_W / 2, 30, { color: blink ? UI.red : UI.gold, shadow: UI.shadow, align: 'center' });
+    }
+  } else {
+    drawText(ctx, match.mode.name, INTERNAL_W / 2, 6, { color: UI.gold, shadow: UI.shadow, align: 'center' });
+  }
+
+  // ---- minimap (bottom-right)
+  if (match.minimap) drawMinimap(ctx, match);
 
   // ---- slots (bottom-center)
   const n = p.slots.length;
@@ -118,5 +137,73 @@ export function drawHud(ctx, match) {
     drawText(ctx, 'WASD MOVE  SPACE DASH  CLICK USE  Q SPECIAL', INTERNAL_W / 2, 60, { color: UI.ink, shadow: UI.shadow, align: 'center' });
     drawText(ctx, 'RMB AIM  1-3/WHEEL SWAP  E SWAP ITEM  ESC PAUSE', INTERNAL_W / 2, 70, { color: UI.ink, shadow: UI.shadow, align: 'center' });
     ctx.globalAlpha = 1;
+  }
+}
+
+const MM = 64;
+
+/** Pre-rendered 64x64 silhouette of the map (floor light, walls dark). */
+export function buildMinimap(map) {
+  const c = document.createElement('canvas');
+  c.width = MM;
+  c.height = MM;
+  const g = c.getContext('2d');
+  const img = g.createImageData(MM, MM);
+  for (let y = 0; y < MM; y++) {
+    for (let x = 0; x < MM; x++) {
+      const tx = Math.floor((x / MM) * map.w);
+      const ty = Math.floor((y / MM) * map.h);
+      const t = map.get(tx, ty);
+      const i = (y * MM + x) * 4;
+      const floor = t !== 1;
+      img.data[i] = floor ? 150 : 34;
+      img.data[i + 1] = floor ? 130 : 28;
+      img.data[i + 2] = floor ? 110 : 40;
+      img.data[i + 3] = 255;
+    }
+  }
+  g.putImageData(img, 0, 0);
+  return c;
+}
+
+/** Minimap: silhouette, current and next zone, the player dot. No enemies. */
+function drawMinimap(ctx, match) {
+  const x0 = INTERNAL_W - MM - 6;
+  const y0 = INTERNAL_H - MM - 6;
+  const sx = MM / match.map.pw;
+  const sy = MM / match.map.ph;
+  ctx.fillStyle = '#000000';
+  ctx.fillRect(x0 - 1, y0 - 1, MM + 2, MM + 2);
+  ctx.globalAlpha = 0.85;
+  ctx.drawImage(match.minimap, x0, y0);
+  ctx.globalAlpha = 1;
+  const z = match.zone;
+  if (z) {
+    const c = z.cur;
+    const rx0 = x0 + Math.round(c.x0 * sx);
+    const ry0 = y0 + Math.round(c.y0 * sy);
+    const rx1 = x0 + Math.round(c.x1 * sx);
+    const ry1 = y0 + Math.round(c.y1 * sy);
+    ctx.globalAlpha = 0.55;
+    ctx.fillStyle = '#0b0a1a';
+    ctx.fillRect(x0, y0, MM, Math.max(0, ry0 - y0));
+    ctx.fillRect(x0, ry1, MM, Math.max(0, y0 + MM - ry1));
+    ctx.fillRect(x0, ry0, Math.max(0, rx0 - x0), ry1 - ry0);
+    ctx.fillRect(rx1, ry0, Math.max(0, x0 + MM - rx1), ry1 - ry0);
+    ctx.globalAlpha = 1;
+    ctx.strokeStyle = '#e43b44';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(rx0 + 0.5, ry0 + 0.5, Math.max(1, rx1 - rx0 - 1), Math.max(1, ry1 - ry0 - 1));
+    if (z.state === 'wait' && !z.done) {
+      const n = z.next;
+      ctx.strokeStyle = '#ffffff';
+      ctx.strokeRect(x0 + Math.round(n.x0 * sx) + 0.5, y0 + Math.round(n.y0 * sy) + 0.5,
+        Math.max(1, Math.round((n.x1 - n.x0) * sx) - 1), Math.max(1, Math.round((n.y1 - n.y0) * sy) - 1));
+    }
+  }
+  const p = match.player;
+  if (p.alive && Math.floor(match.time * 3) % 3 !== 0) {
+    ctx.fillStyle = UI.gold;
+    ctx.fillRect(x0 + Math.round(p.x * sx) - 1, y0 + Math.round(p.y * sy) - 1, 3, 3);
   }
 }

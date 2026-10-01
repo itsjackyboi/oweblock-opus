@@ -5,7 +5,7 @@ import { Renderer } from './core/renderer.js';
 import { Input } from './core/input.js';
 import { Assets } from './core/assets.js';
 import { SpriteCache } from './core/sprites.js';
-import { Loop } from './core/loop.js';
+import { Loop, perfStats, resetPerf } from './core/loop.js';
 import { Game } from './game/game.js';
 import { drawText } from './ui/font.js';
 import { initRegistry, createItem, allDefs } from './data/registry.js';
@@ -41,6 +41,9 @@ async function boot() {
       get state() { return game.screen; },
       get match() { return game.match; },
       get perf() { return loop.perf; },
+      perfStats: () => perfStats(loop),
+      resetPerf: () => resetPerf(loop),
+      result: null,
       start: (opts) => game.startMatch(opts),
       items: () => allDefs().map((d) => d.id),
       /** Give the player an item (upgrades if owned; fills a free slot, else replaces the held one). */
@@ -62,6 +65,16 @@ async function boot() {
         for (const f of m?.fighters || []) if (!f.isPlayer && f.alive) dealDamage(m, f, 1e6, { kind: 'dot', raw: true });
       },
     };
+  }
+  // ?sim=1: a high-tier AI plays instead of you; the match runs at ?speed and reports when one is left.
+  if (URLP.sim) {
+    game.onSimEnd = (r) => {
+      const res = { ...r, perf: perfStats(loop) };
+      if (window.__oweblock) window.__oweblock.result = res;
+      console.log('[sim] ' + JSON.stringify(res));
+    };
+    game.startMatch();
+    resetPerf(loop);
   }
   loop.start();
 }

@@ -21,6 +21,8 @@ export class Loop {
     this.last = 0;
     this.running = false;
     this.perf = { fps: 0, updateMs: 0, renderMs: 0, steps: 0, frames: 0 };
+    // Ring buffers of per-frame costs: update ms per step, render ms.
+    this.samples = { n: 0, cap: 4096, update: new Float32Array(4096), render: new Float32Array(4096) };
     this._fpsT = 0;
     this._fpsN = 0;
     this._frame = this._frame.bind(this);
@@ -74,6 +76,13 @@ export class Loop {
     const t2 = performance.now();
 
     const p = this.perf;
+    const sm = this.samples;
+    if (steps > 0) {
+      const k = sm.n % sm.cap;
+      sm.update[k] = (t1 - t0) / steps;
+      sm.render[k] = t2 - t1;
+      sm.n++;
+    }
     p.steps = steps;
     p.frames++;
     // Smoothed per-step update cost and per-frame render cost.
@@ -82,3 +91,19 @@ export class Loop {
     requestAnimationFrame(this._frame);
   }
 }
+
+/** avg / p99 of the recorded samples. */
+export function perfStats(loop) {
+  const sm = loop.samples;
+  const n = Math.min(sm.n, sm.cap);
+  const pick = (arr) => {
+    const a = Array.from(arr.subarray(0, n)).sort((x, y) => x - y);
+    const avg = a.reduce((s, v) => s + v, 0) / Math.max(1, n);
+    return { avg: +avg.toFixed(3), p99: +(a[Math.floor(n * 0.99)] || 0).toFixed(3) };
+  };
+  const u = pick(sm.update);
+  const r = pick(sm.render);
+  return { frames: n, updateAvg: u.avg, updateP99: u.p99, renderAvg: r.avg, renderP99: r.p99, frameAvg: +(u.avg + r.avg).toFixed(3), frameP99: +(u.p99 + r.p99).toFixed(3) };
+}
+
+export function resetPerf(loop) { loop.samples.n = 0; }

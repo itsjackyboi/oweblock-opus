@@ -24,7 +24,8 @@ export function dealDamage(match, target, amount, o) {
   if (!target.alive) return 0;
   const src = o.source && o.source !== target ? o.source : null;
   const kind = o.kind || 'melee';
-  if (kind !== 'dot' && (target.invuln > 0 || target.statuses.invuln.t > 0)) {
+  const soft = kind === 'dot' || kind === 'zone'; // damage over time: no flash, ignores dash invulnerability
+  if (!soft && (target.invuln > 0 || target.statuses.invuln.t > 0)) {
     if (target.isPlayer || src?.isPlayer) match.particles.popup(target.x, target.y - 12, 'DODGE', '#8b93af');
     return 0;
   }
@@ -40,7 +41,7 @@ export function dealDamage(match, target, amount, o) {
 
   let dmg = amount * (src && !o.raw ? src.stats.damageMul : 1);
   dmg *= 1 - Math.min(COMBAT.armorCap, target.stats.armor);
-  if (target.shield > 0 && kind !== 'dot') { dmg *= 1 - target.shield; target.shield = 0; }
+  if (target.shield > 0 && !soft) { dmg *= 1 - target.shield; target.shield = 0; }
   target.hp -= dmg;
   if (src) {
     src.damageDealt += dmg;
@@ -50,7 +51,7 @@ export function dealDamage(match, target, amount, o) {
   }
 
   // Feel.
-  if (kind !== 'dot') {
+  if (!soft) {
     target.flash = HIT_FLASH;
     target.squash = 1;
   }
@@ -68,12 +69,14 @@ export function dealDamage(match, target, amount, o) {
   if (o.status && o.status.name) addStatus(target, o.status.name, o.status.t, o.status.v, src);
 
   const playerInvolved = target.isPlayer || (src && src.isPlayer);
-  if (kind !== 'dot') {
+  if (!soft) {
     match.particles.spray(target.x, target.y - 3, Math.atan2(dy, dx), 1.4, 5, COLORS[kind] || '#ffffff', 40, 110, 0.25);
   }
   if (playerInvolved) {
-    match.particles.popup(target.x, target.y - 14, String(Math.max(1, Math.round(dmg))), target.isPlayer ? '#e43b44' : (kind === 'dot' ? '#fe8b3a' : '#ffffff'));
-    if (kind !== 'dot') {
+    if (kind !== 'zone' || target.isPlayer) {
+      match.particles.popup(target.x, target.y - 14, String(Math.max(1, Math.round(dmg))), target.isPlayer ? '#e43b44' : (soft ? '#fe8b3a' : '#ffffff'));
+    }
+    if (!soft) {
       match.hitStop(COMBAT.hitStop);
       match.shake(target.isPlayer ? COMBAT.shakePlayerHit : COMBAT.shakePlayerDeals);
     }
