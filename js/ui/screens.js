@@ -80,3 +80,76 @@ export function drawPause(ctx) {
   drawText(ctx, 'PAUSED', INTERNAL_W / 2, 100, { color: UI.gold, shadow: UI.shadow, scale: 3, align: 'center' });
   drawText(ctx, 'ESC RESUME   R RESTART   T TITLE', INTERNAL_W / 2, 140, { color: UI.ink, shadow: UI.shadow, align: 'center' });
 }
+
+// ------------------------------------------------------------------ title menu
+
+const MENU_Y = 172;
+const MENU_STEP = 16;
+const MENU_W = 200;
+
+export function menuHit(n, mouse) {
+  for (let i = 0; i < n; i++) {
+    const y = MENU_Y + i * MENU_STEP;
+    if (mouse.x >= INTERNAL_W / 2 - MENU_W / 2 && mouse.x < INTERNAL_W / 2 + MENU_W / 2 && mouse.y >= y - 3 && mouse.y < y + 11) return i;
+  }
+  return -1;
+}
+
+export function drawMenu(ctx, items, sel, mouse, t) {
+  const hover = menuHit(items.length, mouse);
+  items.forEach((it, i) => {
+    const y = MENU_Y + i * MENU_STEP;
+    const on = i === sel || i === hover;
+    if (on) {
+      ctx.fillStyle = 'rgba(255, 205, 117, 0.15)';
+      ctx.fillRect(INTERNAL_W / 2 - MENU_W / 2, y - 3, MENU_W, 13);
+      const blink = Math.floor(t * 3) % 2 === 0;
+      drawText(ctx, '>', INTERNAL_W / 2 - MENU_W / 2 + 6, y, { color: blink ? UI.gold : UI.ink });
+    }
+    drawText(ctx, it.label, INTERNAL_W / 2, y, { color: on ? UI.gold : UI.ink, shadow: UI.shadow, align: 'center' });
+  });
+  drawText(ctx, 'ARROWS/W S + ENTER, OR CLICK', INTERNAL_W / 2, INTERNAL_H - 12, { color: UI.dim, align: 'center' });
+}
+
+// ------------------------------------------------------------------ mode select
+
+const MODE_W = 140;
+const MODE_H = 150;
+const MODE_GAP = 12;
+
+export function modeCards(n) {
+  const total = n * MODE_W + (n - 1) * MODE_GAP;
+  const x0 = Math.round(INTERNAL_W / 2 - total / 2);
+  return Array.from({ length: n }, (_, i) => ({ x: x0 + i * (MODE_W + MODE_GAP), y: 60, w: MODE_W, h: MODE_H }));
+}
+
+export function drawModeSelect(ctx, game, modes, sel) {
+  const assets = game.assets;
+  ctx.fillStyle = '#1a1c2c';
+  ctx.fillRect(0, 0, INTERNAL_W, INTERNAL_H);
+  drawText(ctx, 'MODE SELECT', INTERNAL_W / 2, 20, { color: UI.gold, shadow: '#b13e53', scale: 2, align: 'center' });
+  const cards = modeCards(modes.length);
+  const mouse = game.input.mouse;
+  modes.forEach((m, i) => {
+    const c = cards[i];
+    const hot = i === sel || (mouse.x >= c.x && mouse.x < c.x + c.w && mouse.y >= c.y && mouse.y < c.y + c.h);
+    ctx.fillStyle = hot ? UI.gold : '#000000';
+    ctx.fillRect(c.x - 2, c.y - 2, c.w + 4, c.h + 4);
+    ctx.fillStyle = '#262b44';
+    ctx.fillRect(c.x, c.y, c.w, c.h);
+    // A little tile swatch from the mode's tileset: floor, wall, wall top.
+    const ts = assets.tileset(m.tileset);
+    const sheet = ts?.sheet;
+    const sw = c.x + c.w / 2 - 36;
+    const roles = ['wallTop', 'wallTop', 'wallTop', 'wall', 'wall', 'wall', 'floor', 'floor', 'floor'];
+    roles.forEach((r, k) => {
+      const frame = assets.pickRole(m.tileset, r === 'floor' && ts?.roles?.roofRed ? 'roofRed' : r, k);
+      assets.draw(ctx, sheet, frame, sw + (k % 3) * 24, c.y + 10 + Math.floor(k / 3) * 16, assets.roleColor(m.tileset, r), 24, 16);
+    });
+    drawText(ctx, `[${i + 1}]`, c.x + 4, c.y + 4, { color: UI.dim });
+    drawText(ctx, m.name, c.x + c.w / 2, c.y + 70, { color: UI.ink, shadow: UI.shadow, scale: 2, align: 'center' });
+    wrap(m.place, c.w - 10).forEach((l, k) => drawText(ctx, l, c.x + c.w / 2, c.y + 92 + k * 9, { color: UI.gold, align: 'center' }));
+    wrap(m.hint || '', c.w - 12).forEach((l, k) => drawText(ctx, l, c.x + c.w / 2, c.y + 114 + k * 9, { color: UI.dim, align: 'center' }));
+  });
+  drawText(ctx, 'LEFT/RIGHT + ENTER, 1-3, OR CLICK   ESC BACK', INTERNAL_W / 2, INTERNAL_H - 14, { color: UI.dim, align: 'center' });
+}

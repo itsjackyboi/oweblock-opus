@@ -100,18 +100,19 @@ export function sprinkle(grid, w, h, chance, rng) {
   }
 }
 
-/** Is tile walkable for connectivity purposes. */
-const passable = (t) => t !== T.WALL;
+/** Is tile walkable for connectivity purposes (pits count, so a dash can cross them). */
+const passable = (t) => t !== T.WALL && t !== T.COVER;
 
 /**
  * Label connected passable regions (4-neighborhood). Returns { labels:Int32Array, sizes:number[] }.
  */
-export function regions(grid, w, h) {
+export function regions(grid, w, h, isPassable = passable) {
+  const pass = isPassable;
   const labels = new Int32Array(w * h).fill(-1);
   const sizes = [];
   const stack = [];
   for (let i = 0; i < grid.length; i++) {
-    if (labels[i] !== -1 || !passable(grid[i])) continue;
+    if (labels[i] !== -1 || !pass(grid[i])) continue;
     const id = sizes.length;
     let size = 0;
     stack.push(i);
@@ -131,7 +132,7 @@ export function regions(grid, w, h) {
   return { labels, sizes };
 
   function visit(j) {
-    if (labels[j] === -1 && passable(grid[j])) {
+    if (labels[j] === -1 && pass(grid[j])) {
       labels[j] = sizes.length; // id of the region being filled
       stack.push(j);
     }

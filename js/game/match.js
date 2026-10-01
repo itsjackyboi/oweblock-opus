@@ -11,6 +11,9 @@ import { PlayerController } from './controllers/player.js';
 import { AIController } from '../ai/ai.js';
 import { Nav } from '../ai/nav.js';
 import { Zone, makeHatch, pickFinalPoint } from './zone.js';
+import { makeHazards } from './hazards.js';
+import { dealDamage } from './combat.js';
+import { addStatus } from './statuses.js';
 import { Projectiles } from './projectiles.js';
 import { Areas } from './areas.js';
 import { Pickups } from './pickups.js';
@@ -71,7 +74,7 @@ export class Match {
     this.nextId = 1;
     this.hatch = makeHatch();
     this.minimap = buildMinimap(this.map);
-    this.hazards = [];
+    this.hazards = []; // created after the fighters (some need the map meta)
     this.telegraphs = []; // { kind:'line'|'circle'|'arc', x, y, x2, y2, r, w, a, arc, t, dur, owner, color }
     this.covers = new Map(); // tile index -> { tx, ty, hp, owner, born }
     this.map.onChange = (tx, ty, t) => {
@@ -115,6 +118,7 @@ export class Match {
 
     this._spawnLoot();
     this._scatterXp();
+    this.hazards = makeHazards(this, this.mode.hazards);
     if (this.mode.setup) this.mode.setup(this);
   }
 
@@ -241,6 +245,28 @@ export class Match {
       this.particles.burst(pos.x, pos.y, 10, '#8b93af', 30, 90, 0.4);
     }
     this.killFeed.push({ t: 0, killer: null, victim: null, text: `POLICE HUNT ${target.name}`, player: target.isPlayer });
+  }
+
+  /**
+   * A fighter dropped into a pit (knocked in, dash ended over a gap, skylight broke).
+   * Costs the mode's fall spec, then puts them back on their last safe spot.
+   */
+  onFall(f, spec = this.mode.fall || { damage: 20 }) {
+    if (!f.alive) return;
+    const src = f.lastHitBy && this.time - f.lastHitTime < 3 ? f.lastHitBy : null;
+    this.particles.burst(f.x, f.y, 10, '#1a1c2c', 20, 70, 0.4);
+    if (f.isPlayer) this.particles.popup(f.x, f.y - 16, 'FELL!', '#e43b44');
+    const dmg = (spec.damage || 0) + (spec.maxHpFrac || 0) * f.maxHp;
+    f.x = f.safeX;
+    f.y = f.safeY;
+    f.vx = f.vy = f.kbx = f.kby = 0;
+    f.dashT = 0;
+    f.lungeT = 0;
+    f.reelT = 0;
+    if (spec.stun) addStatus(f, 'stun', spec.stun, 1, src);
+    dealDamage(this, f, dmg, { source: src, kind: 'zone', raw: true });
+    this.particles.ring(f.x, f.y, 3, 14, '#ffffff', 0.3);
+    this.events.emit('fall', { fighter: f });
   }
 
   /** Remove a fighter quietly (hunters leaving), with no drops or kill feed. */
@@ -666,6 +692,7 @@ export class Match {
     for (let i = 0; i < this.hazards.length; i++) if (this.hazards[i].drawTop) this.hazards[i].drawTop(ctx, cam, this);
     this.zone.draw(ctx, cam, this.game.sprites, this.policeLook, this.hatch);
     this.particles.draw(ctx, cam);
+    for (let i = 0; i < this.hazards.length; i++) if (this.hazards[i].drawOverlay) this.hazards[i].drawOverlay(ctx, cam, this);
     for (let i = 0; i < list.length; i++) if (list[i].named || list[i].extra) drawNameTag(ctx, list[i], cam);
     if (this.mode.drawOverlay) this.mode.drawOverlay(ctx, cam, this);
     drawHud(ctx, this);

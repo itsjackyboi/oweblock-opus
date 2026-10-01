@@ -18,6 +18,11 @@ export const TILE_INFO = [
 
 const CHUNK_TILES = CHUNK_PX / TILE;
 
+/** Deco values: frame index in the low bits, plus optional flip flags. */
+export const DECO_FRAME = 0x1fff;
+export const DECO_FLIP_X = 0x2000;
+export const DECO_FLIP_Y = 0x4000;
+
 export class GameMap {
   /**
    * @param {object} o
@@ -202,15 +207,48 @@ export class GameMap {
         let frame = assets.pickRole(ts, role, h >>> 3);
         if (frame < 0 && role === 'wallTopAlt') { role = 'wallTop'; frame = assets.pickRole(ts, role, h >>> 3); }
         assets.draw(g, sheet, frame, dx, dy, assets.roleColor(ts, role));
-        if (t === T.FLOOR && tx < this.w && ty < this.h) {
+        if (tx < this.w && ty < this.h) {
           const d = this.deco[ty * this.w + tx];
-          if (d >= 0) assets.draw(g, sheet, d, dx, dy, null);
+          if (d >= 0) {
+            // Deco frame with optional flips (DECO_FLIP_X / DECO_FLIP_Y bits).
+            const fx = d & DECO_FLIP_X ? -1 : 1;
+            const fy = d & DECO_FLIP_Y ? -1 : 1;
+            if (fx < 0 || fy < 0) {
+              g.save();
+              g.translate(dx + 8, dy + 8);
+              g.scale(fx, fy);
+              assets.draw(g, sheet, d & DECO_FRAME, -8, -8, null);
+              g.restore();
+            } else assets.draw(g, sheet, d & DECO_FRAME, dx, dy, null);
+          }
         }
+        if (t === T.PIT) this._drawPitEdge(g, tx, ty, dx, dy);
+        else if (t === T.FLOOR) this._drawLedge(g, tx, ty, dx, dy);
         if (role === 'wallTop' || role === 'wallTopAlt') this._drawRim(g, tx, ty, dx, dy, edge);
         if (t === T.COVER) drawCrystal(g, dx, dy, h);
       }
     }
     return c;
+  }
+
+  /** Pits: a deep shadow under the ledge above, so a drop reads as a drop. */
+  _drawPitEdge(g, tx, ty, dx, dy) {
+    if (this.get(tx, ty - 1) !== T.PIT) {
+      g.fillStyle = 'rgba(0,0,0,0.55)';
+      g.fillRect(dx, dy, TILE, 5);
+      g.fillStyle = 'rgba(0,0,0,0.3)';
+      g.fillRect(dx, dy + 5, TILE, 3);
+    }
+  }
+
+  /** Floor next to a pit gets a thin dark lip on that side. */
+  _drawLedge(g, tx, ty, dx, dy) {
+    g.fillStyle = '#1a1c2c';
+    if (this.get(tx, ty + 1) === T.PIT) g.fillRect(dx, dy + TILE - 2, TILE, 2);
+    g.fillStyle = '#1a1c2c';
+    if (this.get(tx - 1, ty) === T.PIT) g.fillRect(dx, dy, 1, TILE);
+    if (this.get(tx + 1, ty) === T.PIT) g.fillRect(dx + TILE - 1, dy, 1, TILE);
+    if (this.get(tx, ty - 1) === T.PIT) g.fillRect(dx, dy, TILE, 1);
   }
 
   /** Light stone rim with a dark outline where a wall top meets anything that is not wall top. */

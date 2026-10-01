@@ -144,7 +144,7 @@ export class AIController {
     const attacker = f.lastHitBy;
     // Stray splash from someone else's fight doesn't count: only deliberate attackers (or the player).
     const retaliate = attacker && attacker.alive && !attacker.extra && m.time - f.lastHitTime < 3
-      && (attacker.isPlayer || !attacker.controller || attacker.controller.target === f)
+      && (attacker.isPlayer || !attacker.controller || (attacker.controller.target === f && attacker.controller.engaged))
       && Math.hypot(attacker.x - f.x, attacker.y - f.y) < perc * 1.2;
     if (retaliate) best = attacker;
     if (best && best !== this.target) { this.reactT = rng.range(tier.reaction[0], tier.reaction[1]); this.fightRollT = 0; }
@@ -529,7 +529,7 @@ export class AIController {
         return (this.threat?.incoming || swing) && rng.chance(tier.dodge + 0.1);
       }
       case 'incomingOrClose':
-        return !!this.threat?.incoming || (t && d < 28);
+        return !!this.threat?.incoming || (t && d < 28 && this.engaged);
       case 'clustered':
         return inRange && (countNear(t.x, t.y, 44) >= 2 || rng.chance(tier.relic === 'random' ? 0.15 : 0.06));
       case 'nearWall': {
@@ -567,7 +567,7 @@ export class AIController {
         return false;
       }
       case 'underFire':
-        return !!this.threat?.incoming || (t && d > 50 && t.controller && itemRange(heldItem(t)) > 60 && rng.chance(0.3));
+        return !!this.threat?.incoming || (this.engaged && t && d > 50 && t.controller && itemRange(heldItem(t)) > 60 && rng.chance(0.3));
       case 'coversNearTarget':
         if (!t) return false;
         for (const c of m.coversOf(f)) if (Math.hypot((c.tx + 0.5) * 16 - t.x, (c.ty + 0.5) * 16 - t.y) < 80) return true;
@@ -709,11 +709,12 @@ export class AIController {
     if (ml > 0.01) {
       mx /= ml; my /= ml;
       // Whiskers: if the way ahead is a wall, rotate until it isn't.
-      if (m.map.isSolidAt(f.x + mx * WHISKER, f.y + my * WHISKER)) {
+      // (pits count as blocked: nobody walks off a roof on purpose)
+      if (!m.nav.walkableAt(f.x + mx * WHISKER, f.y + my * WHISKER)) {
         const base = Math.atan2(my, mx);
         for (const off of WHISKER_OFFSETS) {
           const a = base + off * this.strafeSign;
-          if (!m.map.isSolidAt(f.x + Math.cos(a) * WHISKER, f.y + Math.sin(a) * WHISKER)) { mx = Math.cos(a); my = Math.sin(a); break; }
+          if (m.nav.walkableAt(f.x + Math.cos(a) * WHISKER, f.y + Math.sin(a) * WHISKER)) { mx = Math.cos(a); my = Math.sin(a); break; }
         }
       }
     }

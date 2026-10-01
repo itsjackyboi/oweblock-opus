@@ -52,7 +52,7 @@
         "wallTop: 0 plain dark rock. wallTopAlt: 12 rock with holes, 24 rock with rubble.",
         "deco: 42 sand with loose stones.",
         "cover (Stage 4): 82 barrel, 63 wooden crate, 65 stone tomb, 74 anvil.",
-        "pit: not mapped yet (no clean void tile in Tiny Dungeon); Stage 5 decides, placeholder until then."
+        "pit: no clean void tile in Tiny Dungeon, so void pits are a near-black placeholder with a drop shadow."
       ],
       "sheet": "dungeon",
       "roles": {
@@ -72,6 +72,68 @@
         "pit": "#0d0b14",
         "deco": "#c98c5a",
         "cover": "#a0703c"
+      },
+      "edge": { "light": "#c0cbdc", "dark": "#262b44" }
+    },
+    "rooftops": {
+      "_roles": [
+        "Roofs are drawn as deco over a floor tile by the generator (autotiled by position in each roof):",
+        "roofRed: 52 left, 53 middle, 54 right (top rows), 64 65 66 (bottom row with eaves). roofGrey: 48 49 50, 60 61 62.",
+        "skylightRed: 55 and skylightGrey: 51 (dormer windows) mark skylights that crack under you.",
+        "plank: 73 wooden boards (bridges over alleys). floor: 53 fallback roof tile.",
+        "wall (chimney face): 76, 77 grey stone. wallTop (chimney top): 125 stone block with a dark flue. wallTopAlt: 126 brick.",
+        "pit (alley far below): no tile; a dark placeholder with a drop shadow. street: 39, 41 dirt specks seen far below."
+      ],
+      "sheet": "town",
+      "roles": {
+        "floor": [53],
+        "wall": [76, 77],
+        "wallTop": [125],
+        "wallTopAlt": [126],
+        "pit": [],
+        "plank": [73],
+        "roofRed": [52, 53, 54, 64, 65, 66],
+        "roofGrey": [48, 49, 50, 60, 61, 62],
+        "skylightRed": [55],
+        "skylightGrey": [51],
+        "street": []
+      },
+      "placeholder": {
+        "floor": "#c45a3c",
+        "wall": "#8b93af",
+        "wallTop": "#5d6178",
+        "wallTopAlt": "#5d6178",
+        "pit": "#1d1e30"
+      },
+      "edge": { "light": "#c0cbdc", "dark": "#262b44" }
+    },
+    "pipepit": {
+      "_roles": [
+        "floor: 0 plain sand floor (weighted), 2 diagonal-striped floor. pitFloor: 1 checker (the fight pit).",
+        "wall (face): 44, 46 grey panel with an orange stripe; 45, 47 variants. wallTop: 3 dark. wallTopAlt: 32 dark with rubble.",
+        "conveyorV: 16 (arrows up; flipped for down). conveyorH: 26 (arrows right; flipped for left).",
+        "vent: 22 floor grate with orange lights. crate: 73, 85 crates (solid cover). stripe: 118 caution stripes (pit rim)."
+      ],
+      "sheet": "factory",
+      "roles": {
+        "floor": [0, 0, 0, 0, 0, 2],
+        "wall": [44, 46, 44, 46, 45, 47],
+        "wallTop": [3],
+        "wallTopAlt": [32],
+        "pit": [],
+        "pitFloor": [1],
+        "stripe": [118],
+        "conveyorV": [16],
+        "conveyorH": [26],
+        "vent": [22],
+        "crate": [73, 85]
+      },
+      "placeholder": {
+        "floor": "#e8a46c",
+        "wall": "#8b93af",
+        "wallTop": "#3f2832",
+        "wallTopAlt": "#3f2832",
+        "pit": "#0d0b14"
       },
       "edge": { "light": "#c0cbdc", "dark": "#262b44" }
     }

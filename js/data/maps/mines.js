@@ -61,6 +61,20 @@ export function generateMines(rng, size, assets) {
   }
   const liveChambers = chambers.filter((c) => dist[c.y * w + c.x] >= 0);
 
+  // 4b. Void pits: small holes in a few bigger chambers (never the central or deepest one).
+  const pitChambers = rng.shuffle(liveChambers.filter((c) => c.r >= 6.5 && c !== central && c !== deepest)).slice(0, 6);
+  for (const c of pitChambers) {
+    const a = rng.range(0, Math.PI * 2);
+    const px = Math.round(c.x + Math.cos(a) * c.r * 0.35);
+    const py = Math.round(c.y + Math.sin(a) * c.r * 0.35);
+    const pr = rng.range(1.1, 1.8);
+    for (let y = py - 2; y <= py + 2; y++) {
+      for (let x = px - 2; x <= px + 2; x++) {
+        if (grid[y * w + x] === T.FLOOR && (x - px) ** 2 + (y - py) ** 2 <= pr * pr) grid[y * w + x] = T.PIT;
+      }
+    }
+  }
+
   // 5. Floor deco (rubble, cracks) from the tileset's deco role.
   const deco = new Int16Array(w * h).fill(-1);
   const decoList = assets?.tileset('mines')?.roles?.deco || [];

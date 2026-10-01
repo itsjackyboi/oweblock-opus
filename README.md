@@ -4,7 +4,7 @@ A fast, 8-bit, top-down arena battle royale set in Owe Block (Pintland Isles): y
 
 It is a static site with no build step: `index.html`, plain ES modules, Canvas 2D, WebAudio and `localStorage`.
 
-**Status:** Stage 4 of 6, full roster. All 17 items plus the two gang exclusives, relic telegraphs, everyday passives and AI hints for every item.
+**Status:** Stage 5 of 6, modes and named fighters. Mines, Rooftops and Pipe Pit with their hazards, 3–5 named Owe Block fighters per match, police hunters, and mode select.
 
 ## Run it
 
@@ -39,7 +39,7 @@ All of them are inert unless set.
 | Param | Effect |
 |---|---|
 | `?seed=N` | fixed match seed |
-| `?mode=mines` | mode (`rooftops` and `pipepit` arrive in Stage 5) |
+| `?mode=mines` | `mines`, `rooftops` or `pipepit` |
 | `?placeholders=1` | flat-color placeholders instead of art (still fully playable) |
 | `?debug=1` | debug overlay on, plus `window.__oweblock`: `state`, `perf`, `start({seed})`, `items()`, `give(id, level)`, `levelUp()`, `hurt(n)`, `killAllAI()` |
 | `?dummies=N` | N idle fighters around the player, each holding a random item |
@@ -91,6 +91,16 @@ The engine never names a specific item, mode or fighter. All content lives in `j
 - AI hints (`useWhen` / `specialWhen`) are evaluated in `js/ai/ai.js` (`_cond`). Relic timing gets smarter with tier.
 - Give the item an icon with `icons.<id>` in the manifest, or a 16x16 pixel `glyph` in its entry. Without either, it gets a colored box with its initial.
 - To add it to a mode's loot, put its id in `loot.weights` in `js/data/modes.js`.
+
+## Modes
+
+| Mode | Tiles | Layout | Hazards |
+|---|---|---|---|
+| Mines (Dig Dug's mines, Bully Hill) | Tiny Dungeon | cave chambers and narrow tunnels; vault in the deepest chamber | darkness (light around fighters, shorter AI sight), cave-ins, void pits |
+| Rooftops (the final gang war) | Tiny Town | roofs over alleys, plank bridges, chimneys; isolated vault roofs (dash or hook only) | falling into alleys (15% max HP, stun), cracking skylights |
+| Pipe Pit (Mickey's Pipe Club) | Tiny Factory | open central pit (risky loot) ringed by a pipe maze | conveyors, steam vents |
+
+Named fighters (3 to 5 per match) hold their signature item and wear name tags. Kill **Sgt Hark** and 3 to 5 police hunt down the killer.
 
 ## Items
 

@@ -2,7 +2,8 @@
 // the fighter turns intents into movement and dashing, and items.js turns them
 // into item use.
 
-import { FIGHTER, SLOT_COUNT, COMBAT, STANCE } from '../config.js';
+import { FIGHTER, SLOT_COUNT, COMBAT, STANCE, TILE } from '../config.js';
+import { T, TILE_INFO } from './map.js';
 import { clamp, len } from '../core/math.js';
 import { createItem } from '../data/registry.js';
 import { makeStatuses, updateStatuses, moveMul, addStatus, has } from './statuses.js';
@@ -44,6 +45,8 @@ export class Fighter {
 
     this.x = opts.x || 0;
     this.y = opts.y || 0;
+    this.safeX = this.x; // last spot on solid ground (falls return here)
+    this.safeY = this.y;
     this.vx = 0; this.vy = 0; // self-propelled velocity
     this.kbx = 0; this.kby = 0; // knockback velocity
     this.r = FIGHTER.radius;
@@ -197,9 +200,21 @@ export class Fighter {
     const totalY = this.vy + this.kby;
     if (this.reelT > 0) this.reelT -= dt;
     if (this.lungeT > 0) this.lungeT -= dt;
-    map.moveCircle(this.x, this.y, this.r, totalX * dt, totalY * dt, this.dashing || this.reelT > 0 || this.lungeT > 0, moveOut);
+    // Pits block ordinary walking (unless the mode says otherwise); knockback, dashes and reels go over the edge.
+    const overPits = this.dashing || this.reelT > 0 || this.lungeT > 0 || kl > 80 || match.mode.pitsWalkable;
+    map.moveCircle(this.x, this.y, this.r, totalX * dt, totalY * dt, overPits, moveOut);
     this.x = moveOut.x;
     this.y = moveOut.y;
+    const under = map.get(Math.floor(this.x / TILE), Math.floor(this.y / TILE));
+    if (TILE_INFO[under].pit) {
+      if (!this.dashing && this.reelT <= 0 && this.lungeT <= 0) { match.onFall(this); return; }
+    } else if (under === T.FLOOR && !map.isPit(Math.floor((this.x + 6) / TILE), Math.floor(this.y / TILE))
+      && !map.isPit(Math.floor((this.x - 6) / TILE), Math.floor(this.y / TILE))
+      && !map.isPit(Math.floor(this.x / TILE), Math.floor((this.y + 6) / TILE))
+      && !map.isPit(Math.floor(this.x / TILE), Math.floor((this.y - 6) / TILE))) {
+      this.safeX = this.x;
+      this.safeY = this.y;
+    }
     if (moveOut.hitX || moveOut.hitY) {
       const slam = (moveOut.hitX ? Math.abs(this.kbx) : 0) + (moveOut.hitY ? Math.abs(this.kby) : 0);
       if (slam > COMBAT.wallSlamSpeed) {

@@ -91,7 +91,7 @@ try {
   // 2. Match with real art: move around, dash, debug overlay.
   {
     const { p, ctx } = await page('match', 'index.html?debug=1&seed=3&dummies=10');
-    await p.mouse.click(480, 270);
+    await p.keyboard.press('Enter');
     await p.waitForFunction(() => window.__oweblock.state === 'match');
     await p.keyboard.press('F3'); // ?debug=1 starts with the overlay on; hide it for the clean shot
     await p.waitForTimeout(400);
@@ -334,6 +334,41 @@ try {
     await ctx.close();
   }
 
+  // 3c. Mode select, every mode in play, and police hunters after a fighter with an onDeath spawn.
+  {
+    const { p, ctx } = await page('modes', 'index.html?debug=1&seed=8');
+    await p.keyboard.press('ArrowDown');
+    await p.keyboard.press('Enter');
+    await p.waitForFunction(() => window.__oweblock.game.screen === 'modes');
+    await p.evaluate(() => { window.__oweblock.game.showDebug = false; });
+    await p.waitForTimeout(150);
+    await shot(p, '22-mode-select.png');
+    results.modes = [];
+    for (const [i, id] of ['mines', 'rooftops', 'pipepit'].entries()) {
+      await p.evaluate((mode) => window.__oweblock.start({ mode, seed: 8 }), id);
+      await p.waitForTimeout(1200);
+      await shot(p, `23-mode-${i + 1}-${id}.png`);
+      results.modes.push(await p.evaluate(() => {
+        const m = window.__oweblock.match;
+        return { mode: m.mode.id, named: m.fighters.filter((f) => f.named).map((f) => f.name), hazards: m.hazards.length, alive: m.aliveCount };
+      }));
+    }
+    // Police hunters: kill a fighter carrying an onDeath spawn with the player credited.
+    const hunt = await p.evaluate(async () => {
+      const m = window.__oweblock.match;
+      const { NAMED } = await import('./js/data/fighters.js');
+      const spec = NAMED.find((n) => n.onDeath).onDeath.spawn;
+      m.spawnHunters(spec, m.player.x + 40, m.player.y, m.player);
+      const hunters = m.fighters.filter((f) => f.extra);
+      return { hunters: hunters.length, huntingPlayer: hunters.every((f) => f.controller.hunt === m.player), alive: m.aliveCount };
+    });
+    results.hunt = hunt;
+    if (hunt.hunters < 3 || !hunt.huntingPlayer) failures.push(`[hunt] police hunters not spawned right: ${JSON.stringify(hunt)}`);
+    await p.waitForTimeout(800);
+    await shot(p, '24-police-hunt.png');
+    await ctx.close();
+  }
+
   // 4. Death screen.
   {
     const { p, ctx } = await page('death', 'index.html?debug=1&seed=6&dummies=3');
@@ -401,7 +436,8 @@ try {
       const p = await ctx.newPage();
       p.on('console', (m) => { if (m.type() === 'error') failures.push(`[sim ${seed}] console.error: ${m.text()}`); });
       p.on('pageerror', (e) => failures.push(`[sim ${seed}] pageerror: ${e.message}\n${e.stack}`));
-      await p.goto(base + `index.html?debug=1&sim=1&speed=${simSpeed}&seed=${seed}`);
+      const mode = ['mines', 'rooftops', 'pipepit'][(seed - 1) % 3];
+      await p.goto(base + `index.html?debug=1&sim=1&speed=${simSpeed}&seed=${seed}&mode=${mode}`);
       try {
         await p.waitForFunction(() => window.__oweblock && window.__oweblock.result, null, { timeout: (600 / simSpeed + 60) * 1000, polling: 500 });
       } catch {
@@ -430,7 +466,7 @@ try {
       out.push(...(await Promise.all(seeds.slice(i, i + simParallel).map(runSim))));
     }
     results.sims = out.filter(Boolean).map((r) => ({
-      seed: r.seed, duration: r.duration, winner: r.winner, tier: r.winnerTier, kills: r.winnerKills,
+      seed: r.seed, mode: r.mode, duration: r.duration, winner: r.winner, tier: r.winnerTier, kills: r.winnerKills,
       updAvg: r.perf.updateAvg, updP99: r.perf.updateP99, rndAvg: r.perf.renderAvg, rndP99: r.perf.renderP99,
     }));
     const d = results.sims.map((r) => r.duration);

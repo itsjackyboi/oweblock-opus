@@ -222,6 +222,9 @@ export function makeHatch() {
 
 /** Pick the final zone point: a walkable tile, biased away from the map edges. */
 export function pickFinalPoint(map, rng, nav) {
+  // Prefer a spawn point near the middle: guaranteed to be on the main walkable network.
+  const sp = (map.meta.spawns || []).filter((p) => Math.abs(p.x - map.pw / 2) < map.pw * 0.3 && Math.abs(p.y - map.ph / 2) < map.ph * 0.3);
+  if (sp.length) return rng.pick(sp);
   for (let tries = 0; tries < 200; tries++) {
     const x = rng.range(map.pw * 0.25, map.pw * 0.75);
     const y = rng.range(map.ph * 0.25, map.ph * 0.75);
