@@ -1,0 +1,138 @@
+{
+  "_doc": [
+    "OWE BLOCK BRAWL asset manifest. JSON has no comments, so this array documents the format.",
+    "",
+    "sheets: { id: { src, frame:[w,h], spacing, margin, columns, rows } }",
+    "  src is relative to this file. Frame index = row*columns + col, counted from 0 at the top-left.",
+    "  Source x = margin + col*(w+spacing); y = margin + row*(h+spacing).",
+    "  View any sheet with indices: tools/atlas.html?sheet=<id>&scale=4 (optional &cols=a-b, &from=, &to=).",
+    "",
+    "tilesets: { mines|rooftops|pipepit: { sheet, roles:{...}, placeholder:{ role:'#hex' }, edge:{light,dark} } }",
+    "  Roles used by the map renderer:",
+    "    floor      walkable ground. Repeated indices weight the pick.",
+    "    wall       wall FACE: a wall tile whose south neighbor is not wall (the brick front you see).",
+    "    wallTop    wall TOP: a wall tile with wall to its south (the raised rock surface).",
+    "    wallTopAlt rare wall-top variant (about 1 in 61 top tiles).",
+    "    pit        void pit (Stage 5 hazard).",
+    "    cover      destructible cover props (Stage 4+).",
+    "    deco       floor overlays scattered by the generator (full tiles; they replace the floor tile).",
+    "    hazard_*   hazard visuals (Stage 5).",
+    "  When a role lists several indices, a position hash picks one per tile.",
+    "  edge: colors of the procedural rim drawn where a wall top meets floor or a wall face.",
+    "",
+    "characters: paper-doll layers from the 'chars' sheet, drawn bottom to top:",
+    "  body, legs (pants), shoes, torso, hair, beard, hat.",
+    "  body/hair/beard are flat lists. legs/shoes/torso/hat are keyed by palette: red | blue | grey | police.",
+    "  A -1 entry means 'nothing' (e.g. no hat). beardChance = chance a fighter gets a beard.",
+    "  recolor.<palette>: hue remap applied only to legs/shoes/torso/hat, because the sheet has no true red or blue.",
+    "    Pixels with hue in hueFrom and saturation >= minSat move to hueTo; sat and light scale them.",
+    "    red: the sheet's orange outfits -> crimson (Crimson Cutters). blue: teal outfits -> blue (Seaside Circus).",
+    "    police: plumes and any colored bits -> dark navy (Gobbler's police). grey: no remap (the Newcomer).",
+    "  placeholder: flat colors for the fallback figure.",
+    "",
+    "icons: { itemId: { sheet, frame } }. Prefer Tiny Dungeon weapons, potions, staffs. Missing icon -> placeholder.",
+    "anims: { name: { sheet, row, frames, fps } } for future animated sheets. Empty for now.",
+    "",
+    "Fallback: if an image fails to load or a key is missing, a flat rectangle in the role's placeholder color is drawn.",
+    "?placeholders=1 forces placeholders everywhere; the game must stay fully playable that way."
+  ],
+
+  "sheets": {
+    "dungeon": { "src": "kenney/tiny-dungeon/tilemap_packed.png", "frame": [16, 16], "spacing": 0, "margin": 0, "columns": 12, "rows": 11 },
+    "town": { "src": "kenney/tiny-town/tilemap_packed.png", "frame": [16, 16], "spacing": 0, "margin": 0, "columns": 12, "rows": 11 },
+    "factory": { "src": "kenney/tiny-factory/tilemap_packed.png", "frame": [16, 16], "spacing": 0, "margin": 0, "columns": 12, "rows": 11 },
+    "chars": { "src": "kenney/roguelike-characters/roguelikeChar_transparent.png", "frame": [16, 16], "spacing": 1, "margin": 0, "columns": 54, "rows": 12 }
+  },
+
+  "tilesets": {
+    "mines": {
+      "_roles": [
+        "floor: 48 plain sand (weighted x6), 49 and 51 sand with pebbles.",
+        "wall: 40 plain stone brick face (weighted), 28 brick face with a dark grate (rare, reads as an old shaft).",
+        "wallTop: 0 plain dark rock. wallTopAlt: 12 rock with holes, 24 rock with rubble.",
+        "deco: 42 sand with loose stones.",
+        "cover (Stage 4): 82 barrel, 63 wooden crate, 65 stone tomb, 74 anvil.",
+        "pit: not mapped yet (no clean void tile in Tiny Dungeon); Stage 5 decides, placeholder until then."
+      ],
+      "sheet": "dungeon",
+      "roles": {
+        "floor": [48, 48, 48, 49, 48, 48, 51, 48, 48],
+        "wall": [40, 40, 40, 40, 40, 40, 40, 28],
+        "wallTop": [0],
+        "wallTopAlt": [12, 24],
+        "pit": [],
+        "deco": [42],
+        "cover": [82, 63, 65, 74]
+      },
+      "placeholder": {
+        "floor": "#e8a46c",
+        "wall": "#8b9bb4",
+        "wallTop": "#6e3a35",
+        "wallTopAlt": "#6e3a35",
+        "pit": "#0d0b14",
+        "deco": "#c98c5a",
+        "cover": "#a0703c"
+      },
+      "edge": { "light": "#c0cbdc", "dark": "#262b44" }
+    }
+  },
+
+  "characters": {
+    "_layers": [
+      "body: 0,1 light skin; 54,55 tan; 108,109 brown.",
+      "legs (pants, column 3): 273 orange, 327 teal, 57 brown, 165 cream, 3 near-black.",
+      "shoes (column 4): 4 dark, 58 brown.",
+      "torso (columns 6-17): 6-9/60-61/114-117 orange family; 10-13/64-65/118-121 teal family;",
+      "  280-283/334-335/388-389 grey-tan family; 284-287/338-339/392-393 charcoal family (police).",
+      "hair (columns 19-26): brown, ginger, blonde, black and white sets, short and long cuts.",
+      "beard: 181-188 brown/ginger beards, 397-404 blonde/black beards.",
+      "hat: 136,137 orange cap (-> red bandana cap); 190,191 teal cap (-> blue durag cap); 28,29 iron helmet (police)."
+    ],
+    "sheet": "chars",
+    "body": [0, 1, 54, 55, 108, 109],
+    "legs": {
+      "red": [273],
+      "blue": [327],
+      "grey": [57, 165],
+      "police": [3]
+    },
+    "shoes": {
+      "red": [4, 58],
+      "blue": [4, 58],
+      "grey": [4, 58],
+      "police": [4]
+    },
+    "torso": {
+      "red": [6, 7, 8, 9, 60, 61, 114, 115, 116, 117],
+      "blue": [10, 11, 12, 13, 64, 65, 118, 119, 120, 121],
+      "grey": [280, 281, 282, 283, 334, 335, 388, 389],
+      "police": [284, 285, 286, 287, 338, 339, 392, 393]
+    },
+    "hat": {
+      "red": [136, 137, -1, -1],
+      "blue": [190, 191, -1, -1],
+      "grey": [-1],
+      "police": [28, 29]
+    },
+    "hair": [19, 20, 73, 74, 75, 129, 23, 24, 77, 78, 79, 133, 235, 236, 289, 290, 291, 345, 239, 240, 293, 294, 295, 349, 451, 452, 505],
+    "beard": [181, 183, 184, 185, 187, 188, 397, 399, 400, 401, 403, 404],
+    "beardChance": 0.3,
+    "recolor": {
+      "red": { "hueFrom": [5, 45], "hueTo": 354, "minSat": 0.45, "sat": 1.05, "light": 0.9 },
+      "blue": { "hueFrom": [150, 200], "hueTo": 216, "minSat": 0.25, "sat": 1.1, "light": 0.95 },
+      "police": { "hueFrom": [0, 360], "hueTo": 226, "minSat": 0.3, "sat": 0.6, "light": 0.5 }
+    },
+    "placeholder": {
+      "skin": "#e0b48a",
+      "hair": "#5a3a22",
+      "legs": "#3b3346",
+      "red": "#c8323c",
+      "blue": "#2f6fd0",
+      "grey": "#8a8796",
+      "police": "#23263a"
+    }
+  },
+
+  "icons": {},
+  "anims": {}
+}

@@ -1,0 +1,84 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Atlas Viewer</title>
+<style>
+  :root { --bg: #14121a; --fg: #e8e4f0; --grid: rgba(255, 64, 160, 0.55); }
+  body { margin: 0; padding: 12px; background: var(--bg); color: var(--fg); font: 13px monospace; }
+  canvas { image-rendering: pixelated; display: block; }
+  a { color: #8fd3ff; margin-right: 10px; }
+</style>
+</head>
+<body>
+<!--
+  Dev-only atlas viewer (not linked from the game).
+  Usage: tools/atlas.html?sheet=<id>&scale=4&from=0&to=999&cols=0-11
+  Draws the sheet scaled with grid lines and each frame index overlaid,
+  using the sheet geometry in assets/manifest.json.
+-->
+<div id="links"></div>
+<canvas id="c"></canvas>
+<script type="module">
+const q = new URLSearchParams(location.search);
+const manifest = await (await fetch('../assets/manifest.json', { cache: 'no-store' })).json();
+const links = document.getElementById('links');
+for (const id of Object.keys(manifest.sheets)) {
+  const a = document.createElement('a');
+  a.href = `?sheet=${id}`;
+  a.textContent = id;
+  links.appendChild(a);
+}
+const id = q.get('sheet') || Object.keys(manifest.sheets)[0];
+const sh = manifest.sheets[id];
+const scale = +(q.get('scale') || 4);
+const from = +(q.get('from') || 0);
+const to = +(q.get('to') || 1e9);
+const rowFrom = Math.floor(from / sh.columns);
+const rowTo = Math.min(sh.rows - 1, Math.floor(to / sh.columns));
+const [colFrom, colTo] = (q.get('cols') || `0-${sh.columns - 1}`).split('-').map(Number);
+const ncols = colTo - colFrom + 1;
+const img = new Image();
+img.src = '../assets/' + sh.src;
+await img.decode();
+const [fw, fh] = sh.frame;
+const stride = fw + sh.spacing;
+const strideY = fh + sh.spacing;
+const pad = 2;
+const cellW = fw * scale + pad;
+const cellH = fh * scale + pad;
+const rows = rowTo - rowFrom + 1;
+const c = document.getElementById('c');
+c.width = ncols * cellW;
+c.height = rows * cellH;
+const g = c.getContext('2d');
+g.imageSmoothingEnabled = false;
+g.fillStyle = '#3a3448';
+g.fillRect(0, 0, c.width, c.height);
+g.font = `${Math.max(9, scale * 2.5)}px monospace`;
+g.textBaseline = 'top';
+for (let r = rowFrom; r <= rowTo; r++) {
+  for (let col = colFrom; col <= colTo; col++) {
+    const idx = r * sh.columns + col;
+    const x = (col - colFrom) * cellW;
+    const y = (r - rowFrom) * cellH;
+    // Checker so transparent pixels read clearly.
+    g.fillStyle = (r + col) % 2 ? '#2a2633' : '#332e3e';
+    g.fillRect(x, y, fw * scale, fh * scale);
+    g.drawImage(img, sh.margin + col * stride, sh.margin + r * strideY, fw, fh, x, y, fw * scale, fh * scale);
+    g.strokeStyle = 'rgba(255,64,160,0.55)';
+    g.strokeRect(x + 0.5, y + 0.5, fw * scale, fh * scale);
+    const label = String(idx);
+    const tw = g.measureText(label).width;
+    g.fillStyle = 'rgba(0,0,0,0.75)';
+    g.fillRect(x + 1, y + 1, tw + 3, scale * 2.5 + 2);
+    g.fillStyle = '#ffe14d';
+    g.fillText(label, x + 2, y + 2);
+  }
+}
+document.title = `Atlas ${id}`;
+window.__atlasReady = true;
+</script>
+</body>
+</html>
