@@ -405,6 +405,8 @@ export class Match {
     return out;
   }
   hitStop(s) { if (!this.sim) this.game.loop.addHitStop(s); }
+  /** Positional sound (attenuated by distance from the camera). */
+  sfx(name, x, y) { if (!this.sim) this.game.audio?.play(name, x, y, this.game.renderer.camera); }
   shake(t) { if (!this.sim) this.game.renderer.camera.addTrauma(t); }
   isNearPlayer(x, y) {
     const c = this.game.renderer.camera;
@@ -431,6 +433,7 @@ export class Match {
       return;
     }
     victim.placement = this.aliveCount + 1;
+    victim.finalBuild = victim.slots.filter(Boolean).map((s) => ({ id: s.id, level: s.level })); // before the drop
     dropAll(this, victim, this.dropRng);
     const xp = XP.killBase + XP.killPerLevel * victim.level + XP.killBankShare * victim.xpTotal;
     this.pickups.scatterXp(xp, victim.x, victim.y, this.dropRng);
@@ -459,7 +462,7 @@ export class Match {
       killedBy: p.killedBy?.fullName || p.killedBy?.name || (p.exposure > 0 ? "GOBBLER'S POLICE" : null),
       with: p.killedWith?.def.name || null, time: this.time,
       kills: p.kills, damage: Math.round(p.damageDealt), level: p.level,
-      build: p.slots.filter(Boolean).map((s) => ({ id: s.id, level: s.level })),
+      build: p.finalBuild || p.slots.filter(Boolean).map((s) => ({ id: s.id, level: s.level })),
       mode: this.mode.id,
     };
   }

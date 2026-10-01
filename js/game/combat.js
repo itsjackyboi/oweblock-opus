@@ -72,6 +72,7 @@ export function dealDamage(match, target, amount, o) {
   if (!soft) {
     match.particles.spray(target.x, target.y - 3, Math.atan2(dy, dx), 1.4, 5, COLORS[kind] || '#ffffff', 40, 110, 0.25);
   }
+  if (!soft) match.sfx(target.isPlayer ? 'hurt' : dmg >= 25 ? 'hitHeavy' : 'hit', target.x, target.y);
   if (playerInvolved) {
     if (kind !== 'zone' || target.isPlayer) {
       match.particles.popup(target.x, target.y - 14, String(Math.max(1, Math.round(dmg))), target.isPlayer ? '#e43b44' : (soft ? '#fe8b3a' : '#ffffff'));
@@ -91,6 +92,7 @@ function riposte(match, defender, attacker) {
   p.t = 0;
   const a = Math.atan2(attacker.y - defender.y, attacker.x - defender.x);
   match.particles.arc(defender.x, defender.y, a, 2.2, 16, '#73eff7', 0.15, 2);
+  match.sfx('parry', defender.x, defender.y);
   match.particles.burst(defender.x + Math.cos(a) * 8, defender.y + Math.sin(a) * 8, 10, '#ffffff', 60, 160, 0.3);
   if (p.item) p.item.cdP = 0; // a clean riposte readies the next slash
   dealDamage(match, attacker, p.counterDamage, {
@@ -114,6 +116,7 @@ function kill(match, victim) {
   // The last fighter to hurt the victim gets the kill if it was recent (even if they died since).
   const killer = k && match.time - victim.lastHitTime <= COMBAT.killCreditWindow ? k : null;
   if (killer) killer.kills++;
+  if (!victim.isPlayer) match.sfx('kill', victim.x, victim.y);
   const playerInvolved = victim.isPlayer || killer?.isPlayer;
   if (playerInvolved) {
     match.hitStop(COMBAT.killHitStop);

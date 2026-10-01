@@ -276,6 +276,41 @@ try {
     const res = await ob(() => window.__oweblock.match.result);
     if (!res || !res.win) failures.push('[combat] no win result after killAllAI');
     results.perfCombat = await ob(() => ({ updateMs: +window.__oweblock.perf.updateMs.toFixed(3), renderMs: +window.__oweblock.perf.renderMs.toFixed(3) }));
+
+    // Win -> induction -> summary -> title; the gang weapon and color carry into the next match.
+    await p.keyboard.press('Enter');
+    await p.waitForTimeout(150);
+    if (await ob(() => window.__oweblock.game.screen) !== 'induct') failures.push('[win] no induction screen after a win');
+    await shot(p, '25-induct.png');
+    await p.keyboard.press('Digit1');
+    await p.waitForTimeout(150);
+    await shot(p, '26-summary-win.png');
+    await p.keyboard.press('Enter');
+    await p.waitForTimeout(150);
+    const save = await ob(() => JSON.parse(localStorage.getItem('oweblock.save.v1') || 'null'));
+    results.save = save && { unlocked: save.unlocked, color: save.color, startWeapon: save.startWeapon, matches: save.totals.matches, wins: save.totals.wins };
+    if (!save || !save.unlocked.cutters || save.startWeapon !== 'krags_cleaver') failures.push(`[save] induction not saved: ${JSON.stringify(results.save)}`);
+    await ob(() => window.__oweblock.start({ seed: 9 }));
+    const lo = await ob(() => { const pl = window.__oweblock.match.player; return { item: pl.slots[0]?.id, palette: pl.appearance.palette }; });
+    results.loadout = lo;
+    if (lo.item !== 'krags_cleaver' || lo.palette !== 'red') failures.push(`[save] gang loadout not applied: ${JSON.stringify(lo)}`);
+    await p.waitForTimeout(400);
+    await shot(p, '27-cutter-start.png');
+    // Stats and options screens.
+    await ob(() => window.__oweblock.game.toTitle());
+    await p.waitForTimeout(100);
+    await shot(p, '28-title.png');
+    await ob(() => { window.__oweblock.game.screen = 'stats'; });
+    await p.waitForTimeout(120);
+    await shot(p, '29-stats.png');
+    await ob(() => { window.__oweblock.game.screen = 'options'; });
+    await p.keyboard.press('ArrowDown');
+    await p.keyboard.press('ArrowLeft');
+    await p.waitForTimeout(120);
+    await shot(p, '30-options.png');
+    results.audio = await ob(() => window.__oweblock.game.audio.ctx ? window.__oweblock.game.audio.ctx.state : 'none');
+    const master = await ob(() => window.__oweblock.game.save.settings.master);
+    if (Math.abs(master - 0.7) > 0.001) failures.push(`[options] master volume not adjusted (${master})`);
     await ctx.close();
   }
 
@@ -380,6 +415,15 @@ try {
     await shot(p, '10-death.png');
     const res = await p.evaluate(() => window.__oweblock.match.result);
     if (!res || res.win) failures.push('[death] no death result');
+    await p.keyboard.press('Enter');
+    await p.waitForTimeout(150);
+    await shot(p, '11-summary-death.png');
+    if (await p.evaluate(() => window.__oweblock.game.screen) !== 'summary') failures.push('[death] Enter did not open the summary');
+    await p.keyboard.press('Enter');
+    await p.waitForTimeout(100);
+    await p.evaluate(() => window.__oweblock.start({ seed: 6 }));
+    await p.evaluate(() => window.__oweblock.hurt(1000));
+    await p.waitForTimeout(200);
     await p.keyboard.press('KeyR');
     await p.waitForTimeout(200);
     if (await p.evaluate(() => !!window.__oweblock.match.result)) failures.push('[death] R did not restart');
@@ -393,7 +437,7 @@ try {
     await p.waitForFunction(() => window.__oweblock.state === 'match');
     await hold(p, ['KeyD'], 300);
     await p.waitForTimeout(300);
-    await shot(p, '11-placeholders.png');
+    await shot(p, '12-placeholders.png');
     await ctx.close();
   }
 
@@ -423,7 +467,7 @@ try {
       }, seed);
       const data = await p.evaluate(() => window.__mapShot);
       const { writeFile } = await import('node:fs/promises');
-      await writeFile(path.join(outDir, `12-map-seed${seed}.png`), Buffer.from(data.split(',')[1], 'base64'));
+      await writeFile(path.join(outDir, `31-map-seed${seed}.png`), Buffer.from(data.split(',')[1], 'base64'));
       (results.maps ||= []).push(stats);
       if (stats.spawns < 41) failures.push(`[maps] seed ${seed}: only ${stats.spawns} spawn points (need 41)`);
     }

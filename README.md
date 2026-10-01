@@ -4,7 +4,7 @@ A fast, 8-bit, top-down arena battle royale set in Owe Block (Pintland Isles): y
 
 It is a static site with no build step: `index.html`, plain ES modules, Canvas 2D, WebAudio and `localStorage`.
 
-**Status:** Stage 5 of 6, modes and named fighters. Mines, Rooftops and Pipe Pit with their hazards, 3–5 named Owe Block fighters per match, police hunters, and mode select.
+**Status:** all 6 stages done. Three modes (Mines, Rooftops, Pipe Pit) with their hazards, 20 items, 40 AI fighters with tiers and a pacing director, named fighters and police hunters, gang induction after a win, saved stats and unlocks, chiptune music and SFX, and options.
 
 ## Run it
 
@@ -30,6 +30,7 @@ On GitHub Pages, enable Settings → Pages → *Deploy from a branch*, then pick
 | 1 2 3 / wheel | swap held item (0.15 s) |
 | E | swap the held item for the one on the ground (when all slots are full) |
 | Esc | pause (R restart, T title) |
+| Enter / click | menus; continue from the result screen |
 | F3 | debug overlay |
 
 ## URL parameters
@@ -48,10 +49,10 @@ All of them are inert unless set.
 ## Layout
 
 ```
-js/core/    engine: loop, input, renderer + camera, assets, paper-doll sprites, spatial grid, pools, rng, events
+js/core/    engine: loop, input, renderer + camera, assets, paper-doll sprites, spatial grid, pools, rng, events, save, audio
 js/game/    match, fighter, map + collision, shared map-gen tools, controllers
 js/ai/      AI controller (utility states, tiers) and navigation (flow field + budgeted A*)
-js/data/    all content: modes, maps, items, fighters, tiers, ...
+js/data/    all content: modes, maps, items, fighters, tiers, gangs, sfx, music, ...
 js/ui/      bitmap font, HUD, debug overlay, screens
 assets/     manifest.json + Kenney sheets
 tools/      atlas.html (sheet viewer), smoke.mjs (Playwright smoke test)
@@ -126,6 +127,22 @@ Named fighters (3 to 5 per match) hold their signature item and wear name tags. 
 | Amethyst Shard | grow crystal cover; passive: periodic shield | Shatter crystals into slivers |
 | Krag's Cleaver (Cutters) | 3-hit combo, the third bleeds | Cutter's Charge |
 | Zaar's Edges (Circus) | three ricocheting knives | Ring of Fire |
+
+## Progress and saves
+
+- **Winning** a match opens the induction screen: join the **Crimson Cutters** (Krag's Cleaver, red) or the **Seaside Circus** (Zaar's Edges, blue). The gang's weapon and color unlock for good.
+- **Unlocks / Stats** on the title menu shows both gangs, your totals, your bests (kills, damage, placement, longest life, fastest win) and the last matches. Press 1 to cycle your color and 2 to pick your starting weapon from what you've unlocked.
+- After every match, a summary screen shows your placement, kills, damage, level, time, who got you and your final build, with any new bests marked.
+- **Options:** screen shake on/off, plus master, music and SFX volume (left/right to change).
+- Everything is saved in `localStorage` under `oweblock.save.v1` (`js/core/save.js`), with a version field and a migration hook. If storage is blocked, the game still runs and just forgets on reload.
+
+## Audio
+
+All sound is synthesized at runtime in `js/core/audio.js`: two pulse voices (12.5/25/50% duty), a triangle and a noise channel. There are no audio files.
+
+- SFX are data in `js/data/sfx.js` (frequency sweep, envelope, wave, duty, repeats). At most 12 play at once, quieter with distance from the camera.
+- Music tracks are 16th-note step patterns in `js/data/music.js` (title, plus one per mode), played on a lookahead sequencer. A mode picks its track with `music: '<id>'`.
+- The browser only allows audio after a user gesture, so sound starts with the first key press or click.
 
 ## AI and pacing
 

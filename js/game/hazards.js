@@ -97,6 +97,7 @@ class CaveIn {
         dealDamage(m, f, this.s.damage, { kind: 'hazard', raw: true, stun: this.s.stun, dx: f.x - c.x, dy: f.y - c.y, knockback: 80 });
       }
       m.particles.burst(c.x, c.y, 26, '#8b93af', 30, 140, 0.6, 2);
+      m.sfx('rocks', c.x, c.y);
       m.particles.burst(c.x, c.y, 14, '#5a3a22', 20, 90, 0.5, 2);
       if (m.isNearPlayer(c.x, c.y)) m.shake(0.4);
     }
@@ -245,6 +246,7 @@ class Vent {
             dealDamage(m, f, s.damage, { kind: 'hazard', raw: true, dx: f.x - v.x, dy: f.y - v.y, knockback: s.knockback });
           }
           if (m.isNearPlayer(v.x, v.y)) m.shake(0.15);
+          m.sfx('steam', v.x, v.y);
         }
       } else if (v.state === 'burst') {
         if (Math.random() < dt * 60) {

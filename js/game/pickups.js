@@ -103,7 +103,7 @@ export class Pickups {
           const d = len(dx, dy);
           if (d < tgt.r + 3) {
             addXp(m, tgt, p.value);
-            if (tgt.isPlayer) m.particles.burst(p.x, p.y, 3, '#a7f070', 20, 50, 0.2);
+            if (tgt.isPlayer) { m.particles.burst(p.x, p.y, 3, '#a7f070', 20, 50, 0.2); m.sfx('xp', p.x, p.y); }
             this.pool.release(p);
             continue;
           }

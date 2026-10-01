@@ -19,6 +19,8 @@ import { TILE } from '../config.js';
 import { T } from './map.js';
 
 const hitBuf = [];
+/** Firing sound per projectile kind. */
+const SHOT_SFX = { arrow: 'shoot', bolt: 'bolt', knife: 'knife', boomerang: 'whoosh', hook: 'hook', net: 'net', hoop: 'fire', sliver: 'shatter' };
 const DEG = Math.PI / 180;
 
 function swingFx(ctx, p, angle) {
@@ -33,6 +35,7 @@ function swingFx(ctx, p, angle) {
     m.particles.arc(u.x, u.y - 2, angle, p.arc * DEG, reach - 2, p.color || '#ffffff', 0.14, 2);
     m.particles.arc(u.x, u.y - 2, angle, p.arc * DEG * 0.8, reach - 6, '#8b93af', 0.1, 1);
   }
+  m.sfx(p.style === 'jab' || p.style === 'shove' ? 'jab' : 'swing', u.x, u.y);
   u.swingT = u.swingDur = p.style === 'jab' ? 0.08 : 0.14;
   u.swingArc = p.arc * DEG;
   u.swingDir = -u.swingDir || 1;
@@ -152,6 +155,7 @@ export const ACTIONS = {
         if (proj && p.returns) ctx.item.out++;
       }
       m.particles.spray(u.x + Math.cos(ctx.angle) * 7, u.y + Math.sin(ctx.angle) * 7, ctx.angle, 0.6, 3, '#ffffff', 30, 80, 0.12);
+      m.sfx(SHOT_SFX[p.kind] || 'shoot', u.x, u.y);
     },
   },
 
@@ -200,6 +204,7 @@ export const ACTIONS = {
         tx -= (dx / d) * 8;
         ty -= (dy / d) * 8;
       }
+      m.sfx('throw', u.x, u.y);
       m.projectiles.spawn({
         kind: p.kind || 'pot', color: p.color || '#c86f3b', def: ctx.item.def,
         x: u.x, y: u.y, vx: 0, vy: 0, owner: u, item: ctx.item,
@@ -226,6 +231,7 @@ export const ACTIONS = {
       pr.stun = p.stun || 0;
       pr.item = ctx.item;
       ctx.match.particles.arc(u.x, u.y - 2, ctx.angle, pr.arc, 12, '#73eff7', p.window, 1);
+      ctx.match.sfx('parry', u.x, u.y);
     },
   },
 
@@ -334,6 +340,7 @@ Object.assign(ACTIONS, {
         dealDamage(m, t, p.damage, { source: u, item: ctx.item, kind: 'melee', knockback: p.knockback || 0, status: p.status || null, stun: p.stun || 0, wallStun: p.wallStun || 0 });
       }
       m.particles.ring(u.x, u.y, 4, p.radius, p.color || '#c0cbdc', 0.3, 3);
+      m.sfx('boom', u.x, u.y);
       m.particles.ring(u.x, u.y, 2, p.radius * 0.7, '#ffffff', 0.2, 1);
       m.particles.burst(u.x, u.y + 3, 18, '#c0cbdc', 40, 160, 0.4);
       if (m.isNearPlayer(u.x, u.y)) m.shake(0.35);
@@ -419,6 +426,7 @@ Object.assign(ACTIONS, {
           const y1 = u.y + Math.sin(a) * L;
           beamHit(ctx, u.x, u.y, x1, y1, p.width, p.damage, new Set(), p);
           beamFx(m, u.x, u.y - 2, x1, y1 - 2, p.color || '#b55088', p.width);
+          m.sfx('beam', u.x, u.y);
           if (m.isNearPlayer(u.x, u.y)) m.shake(0.3);
         },
       };
@@ -437,6 +445,7 @@ Object.assign(ACTIONS, {
       const L = p.length * ctx.rangeMul;
       const hit = new Set();
       m.telegraph({ kind: 'arc', x: u.x, y: u.y, r: L, a: ctx.angle, arc: p.arc * DEG, dur: p.windup, owner: u, color: p.color });
+      m.later(p.windup, () => m.sfx('beam', u.x, u.y));
       u.activity = {
         item: ctx.item, t: 0, dur: p.windup + p.duration, lock: true, moveMul: 0.2,
         onUpdate: (act) => {
@@ -468,6 +477,7 @@ Object.assign(ACTIONS, {
       const m = ctx.match;
       const pt = aimPoint(ctx, p.range);
       m.telegraph({ kind: 'circle', x: pt.x, y: pt.y, r: p.area.radius, dur: p.windup, owner: ctx.user, color: p.color });
+      m.sfx('chime', pt.x, pt.y);
       m.later(p.windup, () => m.areas.spawn(p.area, pt.x, pt.y, ctx.user, ctx.item));
     },
   },
@@ -530,6 +540,7 @@ Object.assign(ACTIONS, {
           q.hitIds.length = 0;
         }
       }
+      m.sfx('gust', u.x, u.y);
       for (let k = 0; k < 10; k++) {
         const a = ctx.angle + (Math.random() - 0.5) * p.arc * DEG;
         const sp = 120 + Math.random() * 120;
@@ -544,6 +555,7 @@ Object.assign(ACTIONS, {
       const s = ctx.params.status;
       addStatus(ctx.user, s.name, s.t, s.v, ctx.user);
       ctx.match.particles.ring(ctx.user.x, ctx.user.y, 3, 14, ctx.params.color || '#ffffff', 0.3);
+      ctx.match.sfx('gust', ctx.user.x, ctx.user.y);
     },
   },
 
@@ -555,6 +567,7 @@ Object.assign(ACTIONS, {
       addStatus(u, 'mend', p.healTime, p.heal / p.healTime, u);
       if (p.after) ctx.match.later(p.healTime, () => { if (u.alive) addStatus(u, p.after.name, p.after.t, p.after.v, u); });
       ctx.match.particles.burst(u.x, u.y - 6, 10, ctx.params.color || '#e43b44', 20, 60, 0.5);
+      ctx.match.sfx('drink', u.x, u.y);
       if (u.isPlayer) ctx.match.particles.popup(u.x, u.y - 18, `+${p.heal}`, '#38b764');
     },
   },
@@ -576,6 +589,7 @@ Object.assign(ACTIONS, {
       }
       m.addCover(tx, ty, p.hp, ctx.user, p.max || 4);
       m.particles.burst((tx + 0.5) * TILE, (ty + 0.5) * TILE, 10, '#b55088', 20, 70, 0.4);
+      m.sfx('crystal', (tx + 0.5) * TILE, (ty + 0.5) * TILE);
     },
   },
 
@@ -588,6 +602,7 @@ Object.assign(ACTIONS, {
         const cx = (c.tx + 0.5) * TILE;
         const cy = (c.ty + 0.5) * TILE;
         m.removeCover(c.tx, c.ty);
+        m.sfx('shatter', cx, cy);
         for (let k = 0; k < p.count; k++) {
           const a = (k / p.count) * Math.PI * 2;
           m.projectiles.spawn({

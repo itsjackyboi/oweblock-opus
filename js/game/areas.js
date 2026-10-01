@@ -52,7 +52,8 @@ export class Areas {
     a.x = x; a.y = y; a.owner = owner; a.item = item;
     a.seed = (x * 7 + y * 13) % 100;
     a.born = m.time;
-    if (a.fire) m.particles.ring(x, y, 4, a.r, '#fe8b3a', 0.25, 2);
+    if (a.fire) { m.particles.ring(x, y, 4, a.r, '#fe8b3a', 0.25, 2); m.sfx('fire', x, y); }
+    if (spec.style === 'net') m.sfx('net', x, y);
     if (spec.instant) this._hit(a, spec.instant, a.r);
     return a;
   }
@@ -168,6 +169,7 @@ export class Areas {
           dealDamage(m, f, trig.damage || 0, { source: a.owner, item: a.item, kind: 'area', stun: trig.stun || 0, status: trig.status || null });
           m.particles.burst(a.x, a.y, 10, '#c0cbdc', 40, 120, 0.3);
           m.particles.popup(f.x, f.y - 20, 'SNAP', '#c0cbdc');
+          m.sfx('trap', a.x, a.y);
           if (m.isNearPlayer(a.x, a.y)) m.shake(0.2);
           a.t = a.dur; // spent
           break;
