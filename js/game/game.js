@@ -1,4 +1,4 @@
-// Screen state machine. Stage 1 screens: title -> match, with pause.
+// Screen state machine: title -> match (pause, level-up picker, death/win result).
 
 import { INTERNAL_W, INTERNAL_H, URLP } from '../config.js';
 import { Match } from './match.js';
@@ -6,6 +6,8 @@ import { RNG } from '../core/rng.js';
 import { drawText } from '../ui/font.js';
 import { UI } from '../ui/hud.js';
 import { drawDebug } from '../ui/debug.js';
+import { drawPicker, drawResult, drawPause, pickerCards } from '../ui/screens.js';
+import { generateOffers, applyOffer } from './levelup.js';
 import { DEFAULT_MODE } from '../data/modes.js';
 
 export class Game {
@@ -35,6 +37,7 @@ export class Game {
     this.match = new Match(this, { modeId: opts.mode ?? URLP.mode ?? DEFAULT_MODE, seed });
     this.screen = 'match';
     this.paused = false;
+    this.picker = null;
   }
 
   update(dt) {
@@ -46,14 +49,41 @@ export class Game {
       return;
     }
     if (this.screen === 'match') {
-      if (inp.wasPressed('Escape')) this.paused = !this.paused;
-      if (this.paused) {
-        if (inp.wasPressed('KeyR')) this.startMatch({ seed: this.match.seed });
-        if (inp.wasPressed('KeyT')) { this.screen = 'title'; this.match = null; }
-        return;
+      const m = this.match;
+      if (this.picker) { this._updatePicker(); return; }
+      if (inp.wasPressed('Escape') && !m.result) this.paused = !this.paused;
+      if (this.paused || m.result) {
+        if (inp.wasPressed('KeyR')) { this.startMatch({ seed: m.seed }); return; }
+        if (inp.wasPressed('KeyT')) { this.screen = 'title'; this.match = null; return; }
       }
-      this.match.update(dt);
+      if (this.paused) return;
+      m.update(dt);
+      const p = m.player;
+      if (p.alive && p.pendingLevelUps > 0 && !m.result) {
+        this.picker = { offers: generateOffers(m, p, m.offerRng), hover: -1 };
+        if (!this.picker.offers.length) { p.pendingLevelUps = 0; this.picker = null; }
+      }
     }
+  }
+
+  /** Level-up picker: the world is paused until a card is chosen. */
+  _updatePicker() {
+    const inp = this.input;
+    const pk = this.picker;
+    let choice = -1;
+    for (let i = 0; i < pk.offers.length; i++) if (inp.wasPressed(`Digit${i + 1}`)) choice = i;
+    if (inp.btnPressed[0]) {
+      const cards = pickerCards(pk.offers.length);
+      const mx = inp.mouse.x;
+      const my = inp.mouse.y;
+      cards.forEach((c, i) => { if (mx >= c.x && mx < c.x + c.w && my >= c.y && my < c.y + c.h) choice = i; });
+    }
+    if (choice < 0) return;
+    const m = this.match;
+    applyOffer(m, m.player, pk.offers[choice]);
+    this.picker = null;
+    if (m.player.controller) m.player.controller.blockUse = true;
+    if (m.player.pendingLevelUps > 0) this.picker = { offers: generateOffers(m, m.player, m.offerRng), hover: -1 };
   }
 
   render() {
@@ -62,7 +92,9 @@ export class Game {
     if (this.screen === 'title') this._renderTitle(ctx);
     else if (this.screen === 'match') {
       this.match.render(ctx);
-      if (this.paused) this._renderPause(ctx);
+      if (this.picker) drawPicker(ctx, this.picker, this.match, this.input.mouse);
+      else if (this.match.result) drawResult(ctx, this.match);
+      else if (this.paused) drawPause(ctx);
     }
     if (this.showDebug) drawDebug(ctx, this);
   }
@@ -91,13 +123,6 @@ export class Game {
     if (Math.floor(this.titleT * 2) % 2 === 0) {
       drawText(ctx, 'CLICK OR PRESS ENTER', INTERNAL_W / 2, 196, { color: UI.ink, shadow: UI.shadow, align: 'center' });
     }
-    drawText(ctx, 'STAGE 1 BUILD: ENGINE SKELETON', INTERNAL_W / 2, 250, { color: UI.dim, align: 'center' });
-  }
-
-  _renderPause(ctx) {
-    ctx.fillStyle = 'rgba(10, 8, 16, 0.6)';
-    ctx.fillRect(0, 0, INTERNAL_W, INTERNAL_H);
-    drawText(ctx, 'PAUSED', INTERNAL_W / 2, 100, { color: UI.gold, shadow: UI.shadow, scale: 3, align: 'center' });
-    drawText(ctx, 'ESC RESUME   R RESTART   T TITLE', INTERNAL_W / 2, 140, { color: UI.ink, shadow: UI.shadow, align: 'center' });
+    drawText(ctx, 'STAGE 2 BUILD: PLAYER COMBAT', INTERNAL_W / 2, 250, { color: UI.dim, align: 'center' });
   }
 }

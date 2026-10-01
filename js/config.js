@@ -14,7 +14,7 @@ export const MAX_STEPS_PER_FRAME = 5;
 export const GRID_CELL = 32;
 export const CHUNK_PX = 256;
 
-export const POOL_CAPS = { projectiles: 1024, particles: 2048 };
+export const POOL_CAPS = { projectiles: 1024, particles: 2048, fx: 128, popups: 96, pickups: 768, areas: 128 };
 
 export const FIGHTER = {
   radius: 5,
@@ -36,6 +36,43 @@ export const CAMERA = {
 };
 
 export const HIT_FLASH = 0.08;
+
+export const COMBAT = {
+  hitStop: 0.045, // s, only for hits involving the player
+  killHitStop: 0.07,
+  shakePlayerHit: 0.35, // trauma added when the player is hit
+  shakePlayerDeals: 0.12, // trauma when the player hits someone
+  shakeKill: 0.3,
+  killCreditWindow: 5, // s since the last hit for kill credit
+  wallSlamSpeed: 60, // px/s of knockback needed to count as a wall slam
+  armorCap: 0.6,
+};
+
+export const ITEMS = {
+  maxLevel: 5,
+  swapTime: 0.15,
+  pickupRange: 11, // px from fighter center to grab an item
+  promptRange: 16, // px to show the swap prompt
+  dropNoPickup: 1.0, // s a fighter can't re-grab what it just dropped
+};
+
+export const XP = {
+  need: (level) => Math.round(25 * Math.pow(level, 1.35)),
+  killBase: 30,
+  killPerLevel: 10,
+  killBankShare: 0.3,
+  magnet: 30, // px base magnet radius for XP caps
+  scatterValue: 3, // value of each XP cap scattered on the map
+  scatterSpacing: 52, // px between scattered caps
+};
+
+export const STANCE = {
+  speedMul: 0.65,
+  spreadMul: 0.4,
+  rangeMul: 1.15,
+  cameraLean: 0.3, // fraction of the cursor offset
+  cameraLeanMax: 70,
+};
 
 // URL params. All are inert unless set.
 const params = new URLSearchParams(location.search);

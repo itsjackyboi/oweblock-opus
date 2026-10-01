@@ -4,7 +4,7 @@ A fast, 8-bit, top-down arena battle royale set in Owe Block (Pintland Isles): y
 
 It is a static site with no build step: `index.html`, plain ES modules, Canvas 2D, WebAudio and `localStorage`.
 
-**Status:** Stage 1 of 6, the engine skeleton. It has the Mines map, movement and dash, paper-doll fighters, placeholders and the debug overlay.
+**Status:** Stage 2 of 6, player combat. It has the held-item model, Bare Knuckles plus 4 weapons (Cutlass, Singing Bow, Ancient Pot, Drifter's Call), XP, the level-up picker, map loot, death and win screens. AI arrives in Stage 3.
 
 ## Run it
 
@@ -24,9 +24,11 @@ On GitHub Pages, enable Settings → Pages → *Deploy from a branch*, then pick
 | WASD / arrows | move |
 | Space | dash (toward movement, or toward the aim when standing still) |
 | Mouse | aim |
-| Left click / Q / right mouse | use item / item special / aim stance (from Stage 2) |
-| 1 2 3 / wheel | swap held item (from Stage 2) |
-| E | pick up / swap (from Stage 2) |
+| Left click | use the held item (hold to draw a bow) |
+| Q | the held item's special |
+| Right mouse | aim stance: camera leans, spread tightens, +15% range, -35% move speed |
+| 1 2 3 / wheel | swap held item (0.15 s) |
+| E | swap the held item for the one on the ground (when all slots are full) |
 | Esc | pause (R restart, T title) |
 | F3 | debug overlay |
 
@@ -39,8 +41,8 @@ All of them are inert unless set.
 | `?seed=N` | fixed match seed |
 | `?mode=mines` | mode (`rooftops` and `pipepit` arrive in Stage 5) |
 | `?placeholders=1` | flat-color placeholders instead of art (still fully playable) |
-| `?debug=1` | debug overlay on, plus `window.__oweblock` (state, perf, `start()`, `killAllAI()`, ...) |
-| `?dummies=N` | N idle fighters around the player |
+| `?debug=1` | debug overlay on, plus `window.__oweblock`: `state`, `perf`, `start({seed})`, `items()`, `give(id, level)`, `levelUp()`, `hurt(n)`, `killAllAI()` |
+| `?dummies=N` | N idle fighters around the player, each holding a random item |
 | `?sim=1&speed=10` | AI-only fast simulation (Stage 3) |
 
 ## Layout
@@ -63,7 +65,24 @@ The engine never names a specific item, mode or fighter. All content lives in `j
 
 **A tileset.** Add `tilesets.<id>` to `assets/manifest.json` and map each role (`floor`, `wall`, `wallTop`, ...) to frame indices. Find the indices with `tools/atlas.html?sheet=<sheet>&scale=4`. The `_doc` key at the top of the manifest documents the whole format.
 
-**An item** (from Stage 2). Add one entry to `js/data/weapons.js` or `js/data/magic.js`. Compose behavior from the action primitives in `js/game/actions.js`, and put truly unique behavior in that entry's `hooks`.
+**An item.** Add one entry to `js/data/weapons.js` or `js/data/magic.js`:
+
+```js
+{ id: 'cutlass', name: 'Cutlass', kind: 'weapon', loot: true, rarity: 'common',
+  effect: 'Wide slash. Q: Riposte parries and reflects.',   // the one line shown in the UI
+  primary: { action: 'meleeArc', cooldown: [0.38, 0.36, 0.34, 0.32, 0.3],
+             params: { damage: [14, 16, 18, 20, 23], arc: 100, reach: 22, knockback: 120 } },
+  special: { action: 'parry', cooldown: 4, params: { window: 0.3, arc: 140, counterDamage: 20, stun: 0.7 } },
+  passive: null,
+  ai: { idealRange: 16, aim: 'direct', useWhen: 'inRange', specialWhen: 'incoming' },
+  hold: { rot: 90, dist: 7, size: 12 } }
+```
+
+- Any param can be a 5-length array, indexed by item level.
+- `js/data/registry.js` validates every entry at boot and logs a clear error for a bad one.
+- Behavior comes from the generic primitives in `js/game/actions.js`: `meleeArc`, `projectile` (with `pierce`, `bounce` and `returns`), `chargeRelease`, `throwArea`, `parry` and `orbit`. More arrive in Stage 4.
+- Give the item an icon with `icons.<id>` in the manifest, or a 16x16 pixel `glyph` in its entry. Without either, it gets a colored box with its initial.
+- To add it to a mode's loot, put its id in `loot.weights` in `js/data/modes.js`.
 
 ## Development
 

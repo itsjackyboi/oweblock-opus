@@ -12,7 +12,14 @@ export const MODES = [
     size: [120, 120],
     generate: generateMines,
     background: '#472d3c', // drawn outside the map
-    loot: { weights: {}, density: 0, vaultRelicBoost: 0 },
+    // Loot: weight per item id (x rarity weight), density = share of loot points
+    // filled at match start; vault points get relics boosted.
+    loot: {
+      weights: { cutlass: 1, singing_bow: 1, ancient_pot: 1, drifters_call: 1 },
+      density: 0.55,
+      relicShare: 0.06,
+      vaultRelicBoost: 6,
+    },
     zone: { scale: 1 },
     hazards: [],
     music: 'mines',

@@ -112,18 +112,190 @@ try {
     await ctx.close();
   }
 
-  // 3. Placeholders everywhere, localStorage blocked.
+  // 3. Combat: items, aim at a dummy, melee / bow / pot / boomerang, level-up picker, win.
+  {
+    const { p, ctx } = await page('combat', 'index.html?debug=1&seed=5&dummies=6');
+    await p.keyboard.press('Enter');
+    await p.waitForFunction(() => window.__oweblock.state === 'match');
+    await p.keyboard.press('F3');
+    const ob = (fn, arg) => p.evaluate(fn, arg);
+    // Screen position of the nearest dummy (canvas is CSS-scaled 2x at the top-left).
+    const aimAtNearest = async () => {
+      const t = await ob(() => {
+        const m = window.__oweblock.match;
+        const pl = m.player;
+        const cam = window.__oweblock.game.renderer.camera;
+        const rect = document.getElementById('game').getBoundingClientRect();
+        const sc = rect.width / 480;
+        let best = null;
+        for (const f of m.fighters) {
+          if (f === pl || !f.alive) continue;
+          const d = Math.hypot(f.x - pl.x, f.y - pl.y);
+          if (!best || d < best.d) best = { d, f };
+        }
+        if (!best) return null;
+        return { d: best.d, id: best.f.id, sx: rect.left + (best.f.x - cam.ox) * sc, sy: rect.top + (best.f.y - cam.oy) * sc, hp: best.f.hp };
+      });
+      if (t) await p.mouse.move(t.sx, t.sy);
+      return t;
+    };
+    const clearPickers = async () => {
+      for (let k = 0; k < 10 && await ob(() => !!window.__oweblock.game.picker); k++) {
+        await p.keyboard.press('Digit1');
+        await p.waitForTimeout(60);
+      }
+    };
+    const walkTo = async (maxMs) => {
+      // Walk toward the nearest dummy until within ~18 px.
+      const t0 = Date.now();
+      while (Date.now() - t0 < maxMs) {
+        const t = await ob(() => {
+          const m = window.__oweblock.match; const pl = m.player;
+          let best = null;
+          for (const f of m.fighters) if (f !== pl && f.alive) { const d = Math.hypot(f.x - pl.x, f.y - pl.y); if (!best || d < best.d) best = { d, dx: f.x - pl.x, dy: f.y - pl.y }; }
+          return best;
+        });
+        if (!t || t.d < 18) break;
+        const keys = [];
+        if (t.dx > 6) keys.push('KeyD'); else if (t.dx < -6) keys.push('KeyA');
+        if (t.dy > 6) keys.push('KeyS'); else if (t.dy < -6) keys.push('KeyW');
+        await hold(p, keys, 120);
+      }
+    };
+
+    await ob(() => { const o = window.__oweblock; o.give('cutlass', 2); o.give('singing_bow'); o.give('ancient_pot'); });
+    await p.keyboard.press('Digit1');
+    await walkTo(4000);
+    let t = await aimAtNearest();
+    const hp0 = t.hp;
+    await p.mouse.down();
+    await p.waitForTimeout(700);
+    await p.mouse.up();
+    t = await ob((id) => window.__oweblock.match.fighters.find((f) => f.id === id).hp, t.id);
+    results.cutlassDamage = Math.round(hp0 - t);
+    if (!(hp0 - t > 0)) failures.push('[combat] cutlass did no damage');
+
+    // Bow: back off a bit, full draw.
+    await hold(p, ['KeyA'], 350);
+    await p.keyboard.press('Digit2');
+    await p.waitForTimeout(200);
+    await aimAtNearest();
+    await p.mouse.down({ button: 'right' });
+    await p.mouse.down();
+    await p.waitForTimeout(500);
+    await shot(p, '06-bow-draw-stance.png');
+    await p.waitForTimeout(400);
+    await p.mouse.up();
+    await p.mouse.up({ button: 'right' });
+    await p.waitForTimeout(60);
+    results.projectilesAfterBow = await ob(() => window.__oweblock.match.projectiles.count);
+
+    // Pot: oil slick then a fire-pot onto it.
+    await p.keyboard.press('Digit3');
+    await p.waitForTimeout(200);
+    await aimAtNearest();
+    await p.keyboard.press('KeyQ');
+    await p.waitForTimeout(900);
+    await p.mouse.down(); await p.waitForTimeout(40); await p.mouse.up();
+    await p.waitForTimeout(1100);
+    results.areas = await ob(() => window.__oweblock.match.areas.pool.active.map((a) => a.style + ':' + Math.round(a.r)));
+    await shot(p, '07-combat.png');
+    if (!results.areas.length) failures.push('[combat] pot left no area');
+
+    // Boomerang out and back.
+    await clearPickers();
+    await ob(() => { const pl = window.__oweblock.match.player; pl.slots[0] = null; window.__oweblock.give('drifters_call'); });
+    await p.keyboard.press('Digit1');
+    await p.waitForTimeout(200);
+    await aimAtNearest();
+    await p.mouse.down(); await p.waitForTimeout(40); await p.mouse.up();
+    await p.waitForTimeout(300);
+    results.boomerangOut = await ob(() => window.__oweblock.match.player.slots.find((s) => s && s.id === 'drifters_call')?.out);
+    for (let k = 0; k < 30; k++) {
+      await clearPickers();
+      results.boomerangBack = await ob(() => window.__oweblock.match.player.slots.find((s) => s && s.id === 'drifters_call')?.out);
+      if (results.boomerangBack === 0) break;
+      await p.waitForTimeout(100);
+    }
+    if (results.boomerangOut !== 1 || results.boomerangBack !== 0) failures.push(`[combat] boomerang out/back ${results.boomerangOut}/${results.boomerangBack}`);
+
+    // Full slots: walking onto a new item shows the swap prompt; E swaps it in.
+    await clearPickers();
+    const swap = await ob(async () => {
+      const o = window.__oweblock; const m = o.match; const pl = m.player;
+      pl.slots = [null, null, null];
+      o.give('cutlass'); o.give('singing_bow'); o.give('ancient_pot');
+      pl.held = 0;
+      const { createItem } = await import('./js/data/registry.js');
+      m.pickups.spawnItem(createItem('drifters_call', 1), pl.x, pl.y);
+      m.pickups.spawnItem(createItem('cutlass', 1), pl.x + 2, pl.y);
+      return true;
+    });
+    await p.waitForTimeout(150);
+    const prompt = await ob(() => window.__oweblock.match.prompt?.text || null);
+    results.swapPrompt = prompt;
+    const cutLv = await ob(() => window.__oweblock.match.player.slots[0].level);
+    if (cutLv !== 2) failures.push(`[swap] duplicate cutlass did not upgrade (level ${cutLv})`);
+    await p.keyboard.press('KeyE');
+    await p.waitForTimeout(150);
+    const held = await ob(() => window.__oweblock.match.player.slots[0]?.id);
+    if (!swap || !prompt || held !== 'drifters_call') failures.push(`[swap] prompt=${prompt} held=${held}`);
+
+    // Level-up picker.
+    await clearPickers();
+    await ob(() => window.__oweblock.levelUp());
+    await p.waitForTimeout(150);
+    await shot(p, '08-levelup.png');
+    const pickerOpen = await ob(() => !!window.__oweblock.game.picker);
+    if (!pickerOpen) failures.push('[combat] level-up picker did not open');
+    const pend0 = await ob(() => window.__oweblock.match.player.pendingLevelUps);
+    await p.keyboard.press('Digit1');
+    await p.waitForTimeout(100);
+    const pend1 = await ob(() => window.__oweblock.match.player.pendingLevelUps);
+    if (pend1 !== pend0 - 1) failures.push(`[combat] picking did not consume a level-up (${pend0} -> ${pend1})`);
+    await clearPickers();
+    results.level = await ob(() => window.__oweblock.match.player.level);
+
+    // Kill every dummy: drops + XP, then the win screen.
+    await ob(() => window.__oweblock.killAllAI());
+    await p.waitForTimeout(400);
+    results.pickupsAfterKills = await ob(() => window.__oweblock.match.pickups.count);
+    await shot(p, '09-win.png');
+    const res = await ob(() => window.__oweblock.match.result);
+    if (!res || !res.win) failures.push('[combat] no win result after killAllAI');
+    results.perfCombat = await ob(() => ({ updateMs: +window.__oweblock.perf.updateMs.toFixed(3), renderMs: +window.__oweblock.perf.renderMs.toFixed(3) }));
+    await ctx.close();
+  }
+
+  // 4. Death screen.
+  {
+    const { p, ctx } = await page('death', 'index.html?debug=1&seed=6&dummies=3');
+    await p.keyboard.press('Enter');
+    await p.waitForFunction(() => window.__oweblock.state === 'match');
+    await p.keyboard.press('F3');
+    await p.evaluate(() => window.__oweblock.hurt(1000));
+    await p.waitForTimeout(300);
+    await shot(p, '10-death.png');
+    const res = await p.evaluate(() => window.__oweblock.match.result);
+    if (!res || res.win) failures.push('[death] no death result');
+    await p.keyboard.press('KeyR');
+    await p.waitForTimeout(200);
+    if (await p.evaluate(() => !!window.__oweblock.match.result)) failures.push('[death] R did not restart');
+    await ctx.close();
+  }
+
+  // 5. Placeholders everywhere, localStorage blocked.
   {
     const { p, ctx } = await page('placeholders', 'index.html?debug=1&seed=3&dummies=10&placeholders=1', { blockStorage: true });
     await p.keyboard.press('Enter');
     await p.waitForFunction(() => window.__oweblock.state === 'match');
     await hold(p, ['KeyD'], 300);
     await p.waitForTimeout(300);
-    await shot(p, '05-placeholders.png');
+    await shot(p, '11-placeholders.png');
     await ctx.close();
   }
 
-  // 4. Map overview for a few seeds (whole map scaled into one image).
+  // 6. Map overview for a few seeds (whole map scaled into one image).
   {
     const { p, ctx } = await page('maps', 'index.html?debug=1');
     for (const seed of [1, 2, 3]) {
@@ -149,7 +321,7 @@ try {
       }, seed);
       const data = await p.evaluate(() => window.__mapShot);
       const { writeFile } = await import('node:fs/promises');
-      await writeFile(path.join(outDir, `06-map-seed${seed}.png`), Buffer.from(data.split(',')[1], 'base64'));
+      await writeFile(path.join(outDir, `12-map-seed${seed}.png`), Buffer.from(data.split(',')[1], 'base64'));
       (results.maps ||= []).push(stats);
       if (stats.spawns < 41) failures.push(`[maps] seed ${seed}: only ${stats.spawns} spawn points (need 41)`);
     }

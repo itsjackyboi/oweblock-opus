@@ -8,6 +8,11 @@ import { SpriteCache } from './core/sprites.js';
 import { Loop } from './core/loop.js';
 import { Game } from './game/game.js';
 import { drawText } from './ui/font.js';
+import { initRegistry, createItem, allDefs } from './data/registry.js';
+import { ACTIONS } from './game/actions.js';
+import { tryAutoPickup } from './game/items.js';
+import { addXp, xpNeeded } from './game/levelup.js';
+import { dealDamage } from './game/combat.js';
 
 async function boot() {
   const canvas = document.getElementById('game');
@@ -15,6 +20,7 @@ async function boot() {
   renderer.clear('#1a1c2c');
   drawText(renderer.ctx, 'LOADING...', INTERNAL_W / 2, INTERNAL_H / 2, { color: '#f4f4f4', align: 'center' });
 
+  initRegistry(ACTIONS);
   const input = new Input(canvas, INTERNAL_W, INTERNAL_H);
   const assets = await new Assets({ forcePlaceholders: URLP.placeholders }).load('assets/manifest.json');
   const sprites = new SpriteCache(assets);
@@ -36,10 +42,24 @@ async function boot() {
       get match() { return game.match; },
       get perf() { return loop.perf; },
       start: (opts) => game.startMatch(opts),
-      give: () => console.warn('[debug] give() arrives with items in Stage 2'),
-      levelUp: () => console.warn('[debug] levelUp() arrives in Stage 2'),
+      items: () => allDefs().map((d) => d.id),
+      /** Give the player an item (upgrades if owned; fills a free slot, else replaces the held one). */
+      give: (id, level = 1) => {
+        const m = game.match;
+        const item = createItem(id, level);
+        if (!m || !item) return false;
+        const p = m.player;
+        if (!tryAutoPickup(m, p, item)) p.slots[p.held] = item;
+        return true;
+      },
+      levelUp: () => {
+        const p = game.match?.player;
+        if (p) addXp(game.match, p, xpNeeded(p.level) - p.xp);
+      },
+      hurt: (n) => { const m = game.match; if (m) dealDamage(m, m.player, n, { kind: 'dot', raw: true }); },
       killAllAI: () => {
-        for (const f of game.match?.fighters || []) if (!f.isPlayer) f.alive = false;
+        const m = game.match;
+        for (const f of m?.fighters || []) if (!f.isPlayer && f.alive) dealDamage(m, f, 1e6, { kind: 'dot', raw: true });
       },
     };
   }

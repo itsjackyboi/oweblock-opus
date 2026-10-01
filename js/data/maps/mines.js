@@ -4,7 +4,7 @@
 import { T } from '../../game/map.js';
 import {
   makeGrid, carveBlob, carveTunnel, smooth, sprinkle, keepLargestRegion,
-  distanceField, poissonDisc, spreadPoints, mst,
+  distanceField, poissonDisc, spreadPoints, openPoints, mst,
 } from '../../game/mapgen.js';
 import { TILE } from '../../config.js';
 
@@ -70,18 +70,15 @@ export function generateMines(rng, size, assets) {
     }
   }
 
-  // 6. Spawn points: well-spread open floor (whole 3x3 around the tile is floor), in pixels.
-  const cands = [];
-  for (let ty = 2; ty < h - 2; ty++) {
-    for (let tx = 2; tx < w - 2; tx++) {
-      let open = true;
-      for (let oy = -1; oy <= 1 && open; oy++) {
-        for (let ox = -1; ox <= 1; ox++) if (grid[(ty + oy) * w + tx + ox] !== T.FLOOR) { open = false; break; }
-      }
-      if (open) cands.push({ x: (tx + 0.5) * TILE, y: (ty + 0.5) * TILE });
-    }
-  }
+  // 6. Spawn points: well-spread open floor, in pixels.
+  const cands = openPoints(grid, w, h, TILE);
   const spawns = spreadPoints(cands, 110, 48, rng);
 
-  return { w, h, tiles: grid, deco, meta: { chambers: liveChambers, central, deepest, spawns } };
+  // 7. Loot clusters in chambers; the vault is the deepest chamber.
+  const inChamber = (c, p, k) => Math.hypot(p.x / TILE - c.x, p.y / TILE - c.y) < c.r * k;
+  const chamberCands = cands.filter((p) => liveChambers.some((c) => inChamber(c, p, 0.9)));
+  const lootPoints = spreadPoints(chamberCands, 52, 0, rng);
+  const vaultPoints = spreadPoints(cands.filter((p) => inChamber(deepest, p, 0.8)), 20, 3, rng).slice(0, 3);
+
+  return { w, h, tiles: grid, deco, meta: { chambers: liveChambers, central, deepest, spawns, lootPoints, vaultPoints } };
 }

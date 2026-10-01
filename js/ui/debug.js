@@ -15,6 +15,8 @@ export function drawDebug(ctx, game) {
     lines.push(
       `FIGHTERS ${alive} (DRAWN ${m.fightersDrawn ?? 0})`,
       `GRID CELLS ${m.grid.usedCells}`,
+      `PROJ ${m.projectiles.count}  AREAS ${m.areas.count}`,
+      `PICKUPS ${m.pickups.count}  PARTS ${m.particles.parts.count}`,
       `CHUNKS ${m.map.chunksDrawn}`,
       `SEED ${m.seed}  MAP ${m.map.w}X${m.map.h}`,
       `GEN ${m.genMs.toFixed(0)} MS`,

@@ -124,3 +124,17 @@ function drawRaw(ctx, str, x, y, color, scale) {
     ctx.drawImage(a, gi * GLYPH_W, 0, GLYPH_W, GLYPH_H, x + i * ADVANCE * scale, y, GLYPH_W * scale, GLYPH_H * scale);
   }
 }
+
+/** Split text into lines that fit `width` px at `scale`. */
+export function wrap(str, width, scale = 1) {
+  const max = Math.max(1, Math.floor((width / scale + 1) / ADVANCE));
+  const words = String(str).toUpperCase().split(/\s+/);
+  const lines = [];
+  let line = '';
+  for (const w of words) {
+    const next = line ? line + ' ' + w : w;
+    if (next.length > max && line) { lines.push(line); line = w; } else line = next;
+  }
+  if (line) lines.push(line);
+  return lines;
+}

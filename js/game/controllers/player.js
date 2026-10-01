@@ -10,6 +10,7 @@ export class PlayerController {
   constructor(input, camera) {
     this.input = input;
     this.camera = camera;
+    this.blockUse = false; // set after a menu click so the held button doesn't fire
   }
 
   think(f) {
@@ -20,8 +21,9 @@ export class PlayerController {
     it.moveY = (any(DOWN) ? 1 : 0) - (any(UP) ? 1 : 0);
     it.aimX = this.camera.toWorldX(inp.mouse.x);
     it.aimY = this.camera.toWorldY(inp.mouse.y);
-    it.use = inp.buttons[0];
-    it.usePressed = inp.btnPressed[0];
+    if (this.blockUse && !inp.buttons[0]) this.blockUse = false;
+    it.use = inp.buttons[0] && !this.blockUse;
+    it.usePressed = inp.btnPressed[0] && !this.blockUse;
     it.useReleased = inp.btnReleased[0];
     it.stance = inp.buttons[2];
     it.special = inp.isDown('KeyQ');

@@ -226,6 +226,21 @@ export function poissonDisc(x0, y0, x1, y1, minDist, rng, accept, k = 20, maxPoi
   return pts;
 }
 
+/** Centers (px) of floor tiles whose whole 3x3 neighborhood is floor: room for a fighter. */
+export function openPoints(grid, w, h, tile) {
+  const out = [];
+  for (let ty = 2; ty < h - 2; ty++) {
+    for (let tx = 2; tx < w - 2; tx++) {
+      let open = true;
+      for (let oy = -1; oy <= 1 && open; oy++) {
+        for (let ox = -1; ox <= 1; ox++) if (grid[(ty + oy) * w + tx + ox] !== T.FLOOR) { open = false; break; }
+      }
+      if (open) out.push({ x: (tx + 0.5) * tile, y: (ty + 0.5) * tile });
+    }
+  }
+  return out;
+}
+
 /**
  * Pick well-spread points from candidates ([{x, y}]): greedy dart throwing in a
  * shuffled order, accepting a point only if it is >= minDist from all accepted ones.

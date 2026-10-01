@@ -133,6 +133,14 @@
     }
   },
 
-  "icons": {},
+  "_icons": [
+    "cutlass: dungeon 105 (blade with a curved tip). singing_bow: town 118 (bow with arrow).",
+    "ancient_pot: dungeon 66 (clay pot). drifters_call and fists: no art in any sheet; they use the pixel glyph in their data entry."
+  ],
+  "icons": {
+    "cutlass": { "sheet": "dungeon", "frame": 105 },
+    "singing_bow": { "sheet": "town", "frame": 118 },
+    "ancient_pot": { "sheet": "dungeon", "frame": 66 }
+  },
   "anims": {}
 }
