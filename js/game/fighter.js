@@ -88,6 +88,13 @@ export class Fighter {
     this.dashDX = 0; this.dashDY = 0;
     this.wallStunArm = 0;
     this.wallStunT = 0;
+    this.reelT = 0; // being pulled by a hook: crosses gaps
+    this.lungeT = 0; // forced dash from an item (lunge, charge)
+    this.lungeVX = 0; this.lungeVY = 0;
+    this.spinT = 0; // whirling (Keg Flail)
+    this.pass = { dashDistMul: 1, dashCdMul: 1, shieldEvery: 0, shield: 0 }; // from passives in any slot
+    this.shieldT = 0;
+    this.activity = null; // channel / whirl / brace in progress (see items.js)
 
     this.facing = 1;
     this.aimAngle = 0;
@@ -143,9 +150,9 @@ export class Fighter {
       const dl = len(dx, dy) || 1;
       this.dashDX = dx / dl;
       this.dashDY = dy / dl;
-      this.dashT = FIGHTER.dashTime * this.stats.dashDistMul;
+      this.dashT = FIGHTER.dashTime * this.stats.dashDistMul * this.pass.dashDistMul;
       this.invuln = Math.max(this.invuln, FIGHTER.dashInvuln);
-      this.dashCd = FIGHTER.dashCooldown * this.stats.dashCdMul;
+      this.dashCd = FIGHTER.dashCooldown * this.stats.dashCdMul * this.pass.dashCdMul;
       this.squash = -0.6; // stretch
       match.events.emit('dash', { fighter: this });
       match.particles.burst(this.x, this.y + 4, 5, '#c0cbdc', 20, 60, 0.25);
@@ -153,7 +160,10 @@ export class Fighter {
 
     const speed = FIGHTER.speed * this.stats.speedMul * statusMul * itemMoveMul(this) * (it.stance ? STANCE.speedMul : 1);
     const slippery = has(this, 'slippery');
-    if (this.dashing) {
+    if (this.lungeT > 0) {
+      this.vx = this.lungeVX;
+      this.vy = this.lungeVY;
+    } else if (this.dashing) {
       this.dashT -= dt;
       this.vx = this.dashDX * FIGHTER.dashSpeed;
       this.vy = this.dashDY * FIGHTER.dashSpeed;
@@ -185,7 +195,9 @@ export class Fighter {
 
     const totalX = this.vx + this.kbx;
     const totalY = this.vy + this.kby;
-    map.moveCircle(this.x, this.y, this.r, totalX * dt, totalY * dt, this.dashing, moveOut);
+    if (this.reelT > 0) this.reelT -= dt;
+    if (this.lungeT > 0) this.lungeT -= dt;
+    map.moveCircle(this.x, this.y, this.r, totalX * dt, totalY * dt, this.dashing || this.reelT > 0 || this.lungeT > 0, moveOut);
     this.x = moveOut.x;
     this.y = moveOut.y;
     if (moveOut.hitX || moveOut.hitY) {
@@ -265,6 +277,16 @@ export function drawFighter(ctx, f, cam, sprites, assets) {
   if (f.statuses.burn.t > 0 && Math.random() < 0.5) {
     ctx.fillStyle = Math.random() < 0.5 ? '#fe8b3a' : '#ffcd75';
     ctx.fillRect(x - 4 + ((Math.random() * 8) | 0), y - 8 - ((Math.random() * 6) | 0), 1, 1);
+  }
+  if (f.shield > 0) {
+    // Amethyst shimmer: a few twinkling purple pixels around the body.
+    const t = performance.now() / 160;
+    ctx.fillStyle = Math.floor(t) % 2 ? '#e0a8f0' : '#b55088';
+    for (let k = 0; k < 4; k++) ctx.fillRect(Math.round(x + Math.cos(t + k * 1.57) * 7), Math.round(y - 5 + Math.sin(t + k * 1.57) * 8), 1, 1);
+  }
+  if (f.activity && f.activity.moveMul === 0) {
+    ctx.fillStyle = '#c0cbdc';
+    ctx.fillRect(x - 5, y + 6, 10, 1); // braced stance mark
   }
   if (f.parry.t > 0) {
     ctx.strokeStyle = '#73eff7';

@@ -71,6 +71,14 @@ async function hold(p, keys, ms) {
   for (const k of keys) await p.keyboard.up(k);
 }
 
+async function clearAll(p) {
+  // Dismiss level-up pickers that kills may have opened.
+  for (let k = 0; k < 10 && await p.evaluate(() => !!window.__oweblock.game.picker); k++) {
+    await p.keyboard.press('Digit1');
+    await p.waitForTimeout(50);
+  }
+}
+
 try {
   // 1. Title screen.
   {
@@ -268,6 +276,61 @@ try {
     const res = await ob(() => window.__oweblock.match.result);
     if (!res || !res.win) failures.push('[combat] no win result after killAllAI');
     results.perfCombat = await ob(() => ({ updateMs: +window.__oweblock.perf.updateMs.toFixed(3), renderMs: +window.__oweblock.perf.renderMs.toFixed(3) }));
+    await ctx.close();
+  }
+
+  // 3b. Full roster: every item fires its primary and special at a dummy.
+  {
+    const { p, ctx } = await page('roster', 'index.html?debug=1&seed=5&dummies=6');
+    await p.keyboard.press('Enter');
+    await p.waitForFunction(() => window.__oweblock.state === 'match');
+    await p.keyboard.press('F3');
+    const ids = await p.evaluate(() => window.__oweblock.items());
+    results.roster = { items: ids.length, fired: [] };
+    const shots = { old_staff: '15-staff-channel.png', sad_sermon: '16-sermon.png', veilwalker_net: '17-net.png', powder_keg: '18-keg.png', amethyst_shard: '19-crystal.png', keg_flail: '20-whirl.png', zaars_edges: '21-ring-of-fire.png' };
+    for (const id of ids) {
+      if (id === 'fists') continue;
+      // Fresh dummy field each time: heal everyone, put the player back, give the item.
+      const aim = await p.evaluate((itemId) => {
+        const o = window.__oweblock;
+        const m = o.match;
+        const pl = m.player;
+        pl.slots = [null, null, null];
+        pl.held = 0;
+        pl.hp = pl.maxHp;
+        o.give(itemId, 3);
+        for (const f of m.fighters) { if (f !== pl) { f.maxHp = 1e5; } f.hp = f.maxHp; for (const k in f.statuses) f.statuses[k].t = 0; }
+        pl.pendingLevelUps = 0;
+        let best = null;
+        for (const f of m.fighters) if (f !== pl && f.alive && (!best || Math.hypot(f.x - pl.x, f.y - pl.y) < Math.hypot(best.x - pl.x, best.y - pl.y))) best = f;
+        if (!best) return null;
+        const cam = o.game.renderer.camera;
+        const rect = document.getElementById('game').getBoundingClientRect();
+        const sc = rect.width / 480;
+        return { x: rect.left + (best.x - cam.ox) * sc, y: rect.top + (best.y - cam.oy) * sc };
+      }, id);
+      if (!aim) break;
+      await p.mouse.move(aim.x, aim.y);
+      await p.waitForTimeout(120);
+      await p.mouse.down();
+      await p.waitForTimeout(id === 'singing_bow' ? 800 : 150);
+      await p.mouse.up();
+      await p.waitForTimeout(id === 'old_staff' ? 300 : 500);
+      if (shots[id] && id === 'old_staff') { await shot(p, shots[id]); await p.waitForTimeout(500); }
+      await p.keyboard.down('KeyQ');
+      await p.waitForTimeout(id === 'wagwans_whopper' ? 700 : 80);
+      await p.keyboard.up('KeyQ');
+      await p.waitForTimeout(id === 'old_staff' ? 900 : 450);
+      if (shots[id] && id !== 'old_staff') await shot(p, shots[id]);
+      const st = await p.evaluate(() => {
+        const pl = window.__oweblock.match.player;
+        const it = pl.slots[0];
+        return it ? { cdP: +it.cdP.toFixed(2), cdS: +it.cdS.toFixed(2), charges: it.charges } : null;
+      });
+      results.roster.fired.push(`${id}:${st ? (st.cdP > 0 || st.charges !== undefined ? 'P' : '-') + (st.cdS > 0 ? 'Q' : '-') : 'x'}`);
+      if (!st || st.cdS <= 0) failures.push(`[roster] ${id}: special did not fire (${JSON.stringify(st)})`);
+      await clearAll(p);
+    }
     await ctx.close();
   }
 

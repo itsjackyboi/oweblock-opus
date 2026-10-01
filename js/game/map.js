@@ -6,13 +6,14 @@ import { TILE, CHUNK_PX } from '../config.js';
 import { hash2 } from '../core/math.js';
 
 /** Tile type ids. */
-export const T = { FLOOR: 0, WALL: 1, PIT: 2 };
+export const T = { FLOOR: 0, WALL: 1, PIT: 2, COVER: 3 };
 
 /** Flags per tile type id. `pit` tiles are crossable by a dash. */
 export const TILE_INFO = [
   { name: 'floor', solid: false, blocksSight: false, pit: false },
   { name: 'wall', solid: true, blocksSight: true, pit: false },
   { name: 'pit', solid: false, blocksSight: false, pit: true },
+  { name: 'cover', solid: true, blocksSight: true, pit: false, cover: true }, // destructible (crystals)
 ];
 
 const CHUNK_TILES = CHUNK_PX / TILE;
@@ -52,6 +53,7 @@ export class GameMap {
   set(tx, ty, t) {
     if (tx < 0 || ty < 0 || tx >= this.w || ty >= this.h) return;
     this.tiles[ty * this.w + tx] = t;
+    if (this.onChange) this.onChange(tx, ty, t);
     // A tile change can alter the look of its neighbors (wall faces, rims).
     for (let oy = -1; oy <= 1; oy++) {
       for (let ox = -1; ox <= 1; ox++) this.invalidate(tx + ox, ty + oy);
@@ -205,6 +207,7 @@ export class GameMap {
           if (d >= 0) assets.draw(g, sheet, d, dx, dy, null);
         }
         if (role === 'wallTop' || role === 'wallTopAlt') this._drawRim(g, tx, ty, dx, dy, edge);
+        if (t === T.COVER) drawCrystal(g, dx, dy, h);
       }
     }
     return c;
@@ -232,5 +235,21 @@ export class GameMap {
     if (s) g.fillRect(dx + (w ? 3 : 0), dy + TILE - 4, TILE - (w ? 3 : 0) - (e ? 3 : 0), 1);
     if (w) g.fillRect(dx + 3, dy + (n ? 3 : 0), 1, TILE - (n ? 3 : 0) - (s ? 3 : 0));
     if (e) g.fillRect(dx + TILE - 4, dy + (n ? 3 : 0), 1, TILE - (n ? 3 : 0) - (s ? 3 : 0));
+  }
+}
+
+/** Amethyst crystal cover block, drawn procedurally (no sheet has one). */
+function drawCrystal(g, x, y, h) {
+  const shards = [[3, 5, 4, 10], [7, 1, 4, 14], [11, 6, 3, 9]];
+  g.fillStyle = 'rgba(0,0,0,0.35)';
+  g.fillRect(x + 2, y + 13, 13, 3);
+  for (let i = 0; i < shards.length; i++) {
+    const [sx, sy, w, hh] = shards[(i + h) % 3 === i ? i : i];
+    g.fillStyle = '#3b1d5c';
+    g.fillRect(x + sx - 1, y + sy, w + 2, hh + 1);
+    g.fillStyle = '#b55088';
+    g.fillRect(x + sx, y + sy + 1, w, hh - 1);
+    g.fillStyle = '#e0a8f0';
+    g.fillRect(x + sx, y + sy + 1, 1, hh - 2);
   }
 }

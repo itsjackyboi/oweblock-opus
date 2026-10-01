@@ -4,7 +4,7 @@ import { GRID_CELL, URLP, INTERNAL_W, INTERNAL_H, ITEMS, XP, STANCE, TILE, AI_CO
 import { RNG } from '../core/rng.js';
 import { SpatialGrid } from '../core/grid.js';
 import { Events } from '../core/events.js';
-import { GameMap } from './map.js';
+import { GameMap, T, TILE_INFO } from './map.js';
 import { spreadPoints, openPoints } from './mapgen.js';
 import { Fighter, drawFighter, drawNameTag } from './fighter.js';
 import { PlayerController } from './controllers/player.js';
@@ -72,6 +72,11 @@ export class Match {
     this.hatch = makeHatch();
     this.minimap = buildMinimap(this.map);
     this.hazards = [];
+    this.telegraphs = []; // { kind:'line'|'circle'|'arc', x, y, x2, y2, r, w, a, arc, t, dur, owner, color }
+    this.covers = new Map(); // tile index -> { tx, ty, hp, owner, born }
+    this.map.onChange = (tx, ty, t) => {
+      this.nav.walk[ty * this.map.w + tx] = TILE_INFO[t].solid || TILE_INFO[t].pit ? 0 : 1;
+    };
 
     // Zone: final point and the flow field toward the first target.
     const fp = pickFinalPoint(this.map, this.rng.fork(4), this.nav);
@@ -332,6 +337,47 @@ export class Match {
   }
 
   later(t, fn) { this.timers.push({ t, fn }); }
+
+  /** Register a readable warning (beam lines, rings). AI reads these to dodge. Returns it (mutable). */
+  telegraph(o) {
+    const tg = { kind: 'circle', x: 0, y: 0, x2: 0, y2: 0, r: 0, w: 4, a: 0, arc: 0, t: 0, dur: 0.5, owner: null, color: '#b55088', ...o };
+    this.telegraphs.push(tg);
+    return tg;
+  }
+
+  // ------------------------------------------------------------------ cover (crystals)
+
+  addCover(tx, ty, hp, owner, maxPerOwner = 4) {
+    const mine = this.coversOf(owner);
+    if (mine.length >= maxPerOwner) {
+      mine.sort((a, b) => a.born - b.born);
+      this.removeCover(mine[0].tx, mine[0].ty);
+    }
+    this.covers.set(ty * this.map.w + tx, { tx, ty, hp, owner, born: this.time });
+    this.map.set(tx, ty, T.COVER);
+  }
+
+  removeCover(tx, ty) {
+    const i = ty * this.map.w + tx;
+    if (!this.covers.has(i)) return;
+    this.covers.delete(i);
+    this.map.set(tx, ty, T.FLOOR);
+    this.particles.burst((tx + 0.5) * TILE, (ty + 0.5) * TILE, 12, '#b55088', 30, 110, 0.4);
+  }
+
+  damageCover(tx, ty, amount) {
+    const c = this.covers.get(ty * this.map.w + tx);
+    if (!c) return;
+    c.hp -= amount;
+    this.particles.burst((tx + 0.5) * TILE, (ty + 0.5) * TILE, 3, '#e0a8f0', 20, 60, 0.2);
+    if (c.hp <= 0) this.removeCover(tx, ty);
+  }
+
+  coversOf(owner) {
+    const out = [];
+    for (const c of this.covers.values()) if (c.owner === owner) out.push(c);
+    return out;
+  }
   hitStop(s) { if (!this.sim) this.game.loop.addHitStop(s); }
   shake(t) { if (!this.sim) this.game.renderer.camera.addTrauma(t); }
   isNearPlayer(x, y) {
@@ -422,6 +468,11 @@ export class Match {
       this.nav.buildFlow(this.zone.next);
     }
     for (let i = 0; i < this.hazards.length; i++) this.hazards[i].update(dt, this);
+    for (let i = this.telegraphs.length - 1; i >= 0; i--) {
+      const tg = this.telegraphs[i];
+      tg.t += dt;
+      if (tg.t >= tg.dur || (tg.owner && !tg.owner.alive)) this.telegraphs.splice(i, 1);
+    }
 
     for (let i = 0; i < fs.length; i++) {
       const f = fs[i];
@@ -537,6 +588,44 @@ export class Match {
 
   // ------------------------------------------------------------------ render
 
+  _drawTelegraphs(ctx, cam) {
+    for (const tg of this.telegraphs) {
+      const k = tg.t / tg.dur;
+      const pulse = 0.45 + 0.35 * Math.sin(this.time * 30);
+      ctx.strokeStyle = tg.color;
+      ctx.fillStyle = tg.color;
+      if (tg.kind === 'line') {
+        ctx.globalAlpha = 0.25 + 0.5 * k;
+        ctx.setLineDash([5, 4]);
+        ctx.lineWidth = 1 + Math.round(k * (tg.w - 1));
+        ctx.beginPath();
+        ctx.moveTo(tg.x - cam.ox, tg.y - 2 - cam.oy);
+        ctx.lineTo(tg.x2 - cam.ox, tg.y2 - 2 - cam.oy);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      } else if (tg.kind === 'circle') {
+        ctx.globalAlpha = pulse;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.arc(tg.x - cam.ox, tg.y - cam.oy, tg.r, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.globalAlpha = 0.25;
+        ctx.beginPath();
+        ctx.arc(tg.x - cam.ox, tg.y - cam.oy, Math.max(0.5, tg.r * k), 0, Math.PI * 2);
+        ctx.fill();
+      } else if (tg.kind === 'arc') {
+        ctx.globalAlpha = pulse * 0.6;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        ctx.moveTo(tg.x - cam.ox, tg.y - cam.oy);
+        ctx.arc(tg.x - cam.ox, tg.y - cam.oy, tg.r, tg.a - tg.arc / 2, tg.a + tg.arc / 2);
+        ctx.closePath();
+        ctx.stroke();
+      }
+      ctx.globalAlpha = 1;
+    }
+  }
+
   render(ctx) {
     const cam = this.game.renderer.camera;
     const assets = this.game.assets;
@@ -545,6 +634,7 @@ export class Match {
     this.map.draw(ctx, cam, assets);
     for (let i = 0; i < this.hazards.length; i++) if (this.hazards[i].drawGround) this.hazards[i].drawGround(ctx, cam, this);
     this.areas.draw(ctx, cam);
+    this._drawTelegraphs(ctx, cam);
     this.pickups.draw(ctx, cam, assets);
 
     // Aim line in stance (player only).

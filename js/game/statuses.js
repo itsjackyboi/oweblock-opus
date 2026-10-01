@@ -8,8 +8,10 @@
 //   silence  forced to bare knuckles
 //   slippery low traction: you slide
 //   invuln   immune to damage
+//   haste    move speed * (1 + v)
+//   mend     heals v hp per second
 
-export const STATUS_NAMES = ['root', 'slow', 'stun', 'burn', 'bleed', 'silence', 'slippery', 'invuln'];
+export const STATUS_NAMES = ['root', 'slow', 'stun', 'burn', 'bleed', 'silence', 'slippery', 'invuln', 'haste', 'mend'];
 const DOT_TICK = 0.5;
 
 export function makeStatuses() {
@@ -38,7 +40,8 @@ export function updateStatuses(f, dt, dealDot) {
     const s = st[STATUS_NAMES[i]];
     if (s.t <= 0) continue;
     s.t -= dt;
-    if (STATUS_NAMES[i] === 'burn' || STATUS_NAMES[i] === 'bleed') {
+    if (STATUS_NAMES[i] === 'mend') f.hp = Math.min(f.maxHp, f.hp + s.v * dt);
+    else if (STATUS_NAMES[i] === 'burn' || STATUS_NAMES[i] === 'bleed') {
       s.tick -= dt;
       if (s.tick <= 0) {
         s.tick += DOT_TICK;
@@ -52,7 +55,7 @@ export function updateStatuses(f, dt, dealDot) {
 export function moveMul(f) {
   const st = f.statuses;
   if (st.stun.t > 0 || st.root.t > 0) return 0;
-  return st.slow.t > 0 ? Math.max(0.1, 1 - st.slow.v) : 1;
+  return (st.slow.t > 0 ? Math.max(0.1, 1 - st.slow.v) : 1) * (st.haste.t > 0 ? 1 + st.haste.v : 1);
 }
 
 export const canAct = (f) => f.statuses.stun.t <= 0;

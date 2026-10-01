@@ -1,10 +1,12 @@
 // Pooled projectiles. Movement is substepped (<= 8 px) against tiles; fighter hits
 // use a swept segment-vs-circle test through the spatial hash.
 // Flags: pierce, bounce, returns (boomerang), lob (arcs over cover, lands at a point),
-// orbit (circles its owner and blocks enemy projectiles).
+// orbit (circles its owner and blocks enemy projectiles), hook ('pull' yanks the target,
+// 'self' reels the owner to whatever it hits), burst (area spawned on contact or at the
+// end of its flight), trail (areas dropped every N px).
 
 import { Pool } from '../core/pool.js';
-import { POOL_CAPS } from '../config.js';
+import { POOL_CAPS, FIGHTER, TILE } from '../config.js';
 import { dealDamage, parryBlocks } from './combat.js';
 import { len, TAU } from '../core/math.js';
 import { drawItemIcon } from '../ui/icons.js';
@@ -23,6 +25,7 @@ function blank() {
     lob: false, lobT: 0, lobDur: 0, sx: 0, sy: 0, tx: 0, ty: 0, arcH: 0, h: 0, area: null,
     orbit: false, orbitA: 0, orbitR: 0, spin: 0, life: 0, hitEvery: 0,
     hitIds: [], hitTimes: [], spinA: 0,
+    hook: null, pullDist: 0, burst: null, trail: null, trailD: 0,
   };
 }
 
@@ -161,21 +164,33 @@ export class Projectiles {
           return;
         }
         m.particles.spray(x0, y0, Math.atan2(-sy, -sx), 1.6, 4, p.color, 30, 90, 0.2);
-        this.kill(p);
+        m.damageCover(Math.floor(nx / TILE), Math.floor(ny / TILE), p.damage);
+        if (p.hook === 'self') reel(p.owner, x0, y0);
+        this._end(p, x0, y0);
         return;
       }
       p.x = nx;
       p.y = ny;
       p.travel += len(sx, sy);
+      if (p.trail) {
+        p.trailD += len(sx, sy);
+        if (p.trailD >= p.trail.every) { p.trailD = 0; m.areas.spawn(p.trail.area, nx, ny, p.owner, p.item); }
+      }
       this._hitFighters(p, x0, y0, nx, ny);
       if (!p.alive) return;
       if (!p.returning && p.travel >= p.range) {
         if (p.returns) { this._turn(p); return; }
-        this.kill(p);
+        this._end(p, p.x, p.y);
         return;
       }
     }
     if (p.x < 0 || p.y < 0 || p.x > map.pw || p.y > map.ph) this.kill(p);
+  }
+
+  /** End of flight: drop the burst area (nets, sermons) if any, then remove. */
+  _end(p, x, y) {
+    if (p.burst) this.match.areas.spawn(p.burst, x, y, p.owner, p.item);
+    this.kill(p);
   }
 
   _turn(p) {
@@ -218,10 +233,24 @@ export class Projectiles {
       }
 
       p.hitIds.push(f.id);
-      dealDamage(m, f, p.damage, {
-        source: p.owner, item: p.item, kind: 'projectile', dx: p.vx, dy: p.vy,
-        knockback: p.knockback, stun: p.stun, status: p.status,
-      });
+      if (p.damage > 0 || p.status || p.stun) {
+        dealDamage(m, f, p.damage, {
+          source: p.owner, item: p.item, kind: 'projectile', dx: p.vx, dy: p.vy,
+          knockback: p.knockback, stun: p.stun, status: p.status,
+        });
+      }
+      if (p.hook === 'pull' && p.owner && f.alive) {
+        // Yank the target toward the thrower by about pullDist px.
+        const dx = p.owner.x - f.x;
+        const dy = p.owner.y - f.y;
+        const d = Math.hypot(dx, dy) || 1;
+        const v = Math.sqrt(2 * FIGHTER.knockbackFriction * Math.min(p.pullDist, Math.max(0, d - 12)));
+        f.kbx = (dx / d) * v;
+        f.kby = (dy / d) * v;
+        m.particles.line(f.x, f.y, p.owner.x, p.owner.y, '#c0cbdc', 0.15);
+      }
+      if (p.hook === 'self') reel(p.owner, f.x, f.y);
+      if (p.burst) { this._end(p, cx, cy); return; }
       if (p.returns) continue; // boomerangs pass through
       if (p.pierce > 0) { p.pierce--; continue; }
       this.kill(p);
@@ -255,6 +284,51 @@ export class Projectiles {
         ctx.stroke();
         ctx.fillStyle = '#ffffff';
         ctx.fillRect(Math.round(x + Math.cos(p.spinA) * 4), Math.round(y + Math.sin(p.spinA) * 4), 1, 1);
+      } else if (p.kind === 'bolt') {
+        const a = Math.atan2(p.vy, p.vx);
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.globalAlpha = 0.35;
+        ctx.beginPath(); ctx.moveTo(x - Math.cos(a) * 16, y - Math.sin(a) * 16); ctx.lineTo(x, y); ctx.stroke();
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = p.color;
+        ctx.beginPath(); ctx.moveTo(x - Math.cos(a) * 8, y - Math.sin(a) * 8); ctx.lineTo(x, y); ctx.stroke();
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(x - 1, y - 1, 2, 2);
+      } else if (p.kind === 'hook') {
+        const o = p.owner;
+        if (o) {
+          ctx.strokeStyle = '#8f563b';
+          ctx.lineWidth = 1;
+          ctx.beginPath(); ctx.moveTo(Math.round(o.x - cam.ox), Math.round(o.y - 2 - cam.oy)); ctx.lineTo(x, y); ctx.stroke();
+        }
+        const a = Math.atan2(p.vy, p.vx);
+        ctx.fillStyle = '#c0cbdc';
+        ctx.fillRect(x - 1, y - 1, 3, 3);
+        ctx.fillRect(Math.round(x - Math.cos(a + 1) * 3), Math.round(y - Math.sin(a + 1) * 3), 2, 2);
+        ctx.fillRect(Math.round(x - Math.cos(a - 1) * 3), Math.round(y - Math.sin(a - 1) * 3), 2, 2);
+      } else if (p.kind === 'net') {
+        ctx.strokeStyle = '#c0cbdc';
+        ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.arc(x, y, 4, 0, TAU); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(x - 4, y); ctx.lineTo(x + 4, y); ctx.moveTo(x, y - 4); ctx.lineTo(x, y + 4); ctx.stroke();
+      } else if (p.kind === 'knife') {
+        const a = p.spinA * 1.5;
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(Math.round(x + Math.cos(a) * 2), Math.round(y + Math.sin(a) * 2), 2, 2);
+        ctx.fillStyle = p.color;
+        ctx.fillRect(Math.round(x - Math.cos(a) * 2), Math.round(y - Math.sin(a) * 2), 2, 2);
+      } else if (p.kind === 'hoop') {
+        ctx.strokeStyle = '#fe8b3a';
+        ctx.lineWidth = 2;
+        ctx.beginPath(); ctx.ellipse(x, y - 4, 3 + Math.abs(Math.sin(p.spinA * 0.3)) * 3, 7, 0, 0, TAU); ctx.stroke();
+        ctx.fillStyle = '#ffcd75';
+        ctx.fillRect(Math.round(x + Math.cos(p.spinA) * 3), Math.round(y - 4 + Math.sin(p.spinA) * 6), 2, 2);
+      } else if (p.kind === 'sliver') {
+        ctx.fillStyle = '#e0a8f0';
+        ctx.fillRect(x - 1, y - 1, 2, 2);
+        ctx.fillStyle = '#b55088';
+        ctx.fillRect(Math.round(x - p.vx * 0.01), Math.round(y - p.vy * 0.01), 2, 2);
       } else if (p.kind === 'pot') {
         ctx.globalAlpha = 0.35;
         ctx.fillStyle = '#000';
@@ -274,3 +348,18 @@ export class Projectiles {
   }
 }
 
+
+/** Pull a fighter toward (x, y) with knockback velocity; pits are crossed while reeling. */
+export function reel(f, x, y) {
+  if (!f || !f.alive) return;
+  const dx = x - f.x;
+  const dy = y - f.y;
+  const d = Math.hypot(dx, dy) || 1;
+  const travel = Math.max(0, d - 10);
+  const v = Math.sqrt(2 * FIGHTER.knockbackFriction * travel);
+  f.kbx = (dx / d) * v;
+  f.kby = (dy / d) * v;
+  f.vx = 0;
+  f.vy = 0;
+  f.reelT = v / FIGHTER.knockbackFriction + 0.05;
+}

@@ -128,6 +128,6 @@ export class Game {
     if (Math.floor(this.titleT * 2) % 2 === 0) {
       drawText(ctx, 'CLICK OR PRESS ENTER', INTERNAL_W / 2, 196, { color: UI.ink, shadow: UI.shadow, align: 'center' });
     }
-    drawText(ctx, 'STAGE 3 BUILD: AI', INTERNAL_W / 2, 250, { color: UI.dim, align: 'center' });
+    drawText(ctx, 'STAGE 4 BUILD: FULL ROSTER', INTERNAL_W / 2, 250, { color: UI.dim, align: 'center' });
   }
 }

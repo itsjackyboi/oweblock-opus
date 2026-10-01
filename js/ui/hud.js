@@ -49,7 +49,7 @@ export function drawHud(ctx, match) {
   const hpf = p.hp / p.maxHp;
   bar(ctx, 8, 17, 104, 5, hpf, hpf < 0.3 ? UI.hpLow : UI.hp, UI.hpBack);
   bar(ctx, 8, 26, 104, 3, p.xp / xpNeeded(p.level), UI.xp, '#1b2a1d');
-  const dashFrac = 1 - p.dashCd / (FIGHTER.dashCooldown * p.stats.dashCdMul);
+  const dashFrac = 1 - p.dashCd / (FIGHTER.dashCooldown * p.stats.dashCdMul * p.pass.dashCdMul);
   bar(ctx, 8, 33, 104, 2, dashFrac, dashFrac >= 1 ? UI.dash : UI.dim, '#1b1b2a');
 
   // ---- top-right: alive, kills

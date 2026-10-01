@@ -4,7 +4,7 @@ A fast, 8-bit, top-down arena battle royale set in Owe Block (Pintland Isles): y
 
 It is a static site with no build step: `index.html`, plain ES modules, Canvas 2D, WebAudio and `localStorage`.
 
-**Status:** Stage 3 of 6, AI. 40 AI fighters in three skill tiers, plus Gobbler's police sweep zone, a minimap and fast AI-only simulations.
+**Status:** Stage 4 of 6, full roster. All 17 items plus the two gang exclusives, relic telegraphs, everyday passives and AI hints for every item.
 
 ## Run it
 
@@ -80,9 +80,42 @@ The engine never names a specific item, mode or fighter. All content lives in `j
 
 - Any param can be a 5-length array, indexed by item level.
 - `js/data/registry.js` validates every entry at boot and logs a clear error for a bad one.
-- Behavior comes from the generic primitives in `js/game/actions.js`: `meleeArc`, `projectile` (with `pierce`, `bounce` and `returns`), `chargeRelease`, `throwArea`, `parry` and `orbit`. More arrive in Stage 4.
+- Behavior comes from the generic primitives in `js/game/actions.js`:
+  - melee: `meleeArc` (combo, backstab, outer sweet spot), `thrust`, `dashStrike`, `spin`, `shockwave`, `parry`;
+  - ranged: `projectile` (pierce, bounce, returns, toCursor + burst, trail, stagger), `chargeRelease`, `throwArea`, `salvo`, `orbit`, `hookPull`, `hookSelf`;
+  - beams: `channelBeam`, `sweepBeam`;
+  - placed and area effects: `placeTrap`, `castArea`, `areaAura`, `decoy`, `cone`, `detonate`;
+  - self and cover: `selfBuff`, `consume`, `spawnCover`, `burst`.
+- Ground effects (fire, oil, traps, nets, dirges, kegs, lures) are area specs; `js/game/areas.js` documents the fields.
+- `passive` (for example `{ dashDistMul: 1.35 }`) works from any slot. A primary can have `charges` and `recharge`.
+- AI hints (`useWhen` / `specialWhen`) are evaluated in `js/ai/ai.js` (`_cond`). Relic timing gets smarter with tier.
 - Give the item an icon with `icons.<id>` in the manifest, or a 16x16 pixel `glyph` in its entry. Without either, it gets a colored box with its initial.
 - To add it to a mode's loot, put its id in `loot.weights` in `js/data/modes.js`.
+
+## Items
+
+| Item | Left click | Q |
+|---|---|---|
+| Bare Knuckles | two jabs | shove |
+| Cutlass | 100° slash | Riposte (parry, reflect) |
+| Shiv | stab, x2.5 from behind | Lunge with bleed; a kill resets your dash |
+| Wagwan's Whopper | 160° smash, wall-slam stun | hold: Thunderclap shockwave |
+| Keg Flail | 220° sweep, tip x1.5 | Whirl |
+| Singing Bow | hold to draw; a full draw pierces | 5-arrow Volley |
+| Gaol Arbalest | piercing bolt | Brace, then 3 bolts |
+| Drifter's Call | returning blade | Orbit |
+| Beast Hook | yank a fighter to you | reel yourself in |
+| Bully Hill Mantrap | hidden root trap (max 3) | toss a trap that snaps on landing |
+| Ancient Pot | lobbed fire pool | oil slick (fire ignites it) |
+| Powder Keg | lit keg, short fuse | set them all off |
+| Old Staff (relic) | channelled beam through walls | Sweep |
+| Veilwalker Net (relic) | rooting net | Lure, then a small net |
+| Sad Sermon (relic) | silencing dirge | Last Rites aura |
+| Wolendi Wind Pouch | Gust: push and deflect; passive: better dash | Tailwind |
+| ClockHeart Tonic | drink: heal, then slowed (2 charges) | throw it to slow enemies |
+| Amethyst Shard | grow crystal cover; passive: periodic shield | Shatter crystals into slivers |
+| Krag's Cleaver (Cutters) | 3-hit combo, the third bleeds | Cutter's Charge |
+| Zaar's Edges (Circus) | three ricocheting knives | Ring of Fire |
 
 ## AI and pacing
 

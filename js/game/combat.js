@@ -109,6 +109,7 @@ export function parryBlocks(target, px, py) {
 function kill(match, victim) {
   victim.hp = 0;
   victim.alive = false;
+  victim.activity = null;
   const k = victim.lastHitBy;
   // The last fighter to hurt the victim gets the kill if it was recent (even if they died since).
   const killer = k && match.time - victim.lastHitTime <= COMBAT.killCreditWindow ? k : null;

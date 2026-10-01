@@ -135,12 +135,24 @@
 
   "_icons": [
     "cutlass: dungeon 105 (blade with a curved tip). singing_bow: town 118 (bow with arrow).",
-    "ancient_pot: dungeon 66 (clay pot). drifters_call and fists: no art in any sheet; they use the pixel glyph in their data entry."
+    "ancient_pot: dungeon 66 (clay pot). shiv: dungeon 103 (small dagger). wagwans_whopper: dungeon 117 (mace head).",
+    "beast_hook: factory 122 (hook). powder_keg: dungeon 82 (barrel). krags_cleaver: dungeon 119 (cleaver blade).",
+    "old_staff: dungeon 129 (amethyst-tipped staff). sad_sermon: dungeon 64 (church cross). clockheart_tonic: dungeon 115 (red tonic).",
+    "No art in any sheet, so these use the pixel glyph in their data entry: fists, drifters_call, keg_flail, gaol_arbalest,",
+    "bully_hill_mantrap, zaars_edges, veilwalker_net, wolendi_wind_pouch, amethyst_shard."
   ],
   "icons": {
     "cutlass": { "sheet": "dungeon", "frame": 105 },
     "singing_bow": { "sheet": "town", "frame": 118 },
-    "ancient_pot": { "sheet": "dungeon", "frame": 66 }
+    "ancient_pot": { "sheet": "dungeon", "frame": 66 },
+    "shiv": { "sheet": "dungeon", "frame": 103 },
+    "wagwans_whopper": { "sheet": "dungeon", "frame": 117 },
+    "beast_hook": { "sheet": "factory", "frame": 122 },
+    "powder_keg": { "sheet": "dungeon", "frame": 82 },
+    "krags_cleaver": { "sheet": "dungeon", "frame": 119 },
+    "old_staff": { "sheet": "dungeon", "frame": 129 },
+    "sad_sermon": { "sheet": "dungeon", "frame": 64 },
+    "clockheart_tonic": { "sheet": "dungeon", "frame": 115 }
   },
   "anims": {}
 }

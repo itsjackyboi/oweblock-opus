@@ -9,6 +9,7 @@ import { TIERS } from '../data/tiers.js';
 import { RARITY_WEIGHT } from '../data/registry.js';
 import { heldItem, itemRange, slotOf, freeSlot } from '../game/items.js';
 import { ITEMS } from '../config.js';
+import { ACTIONS } from '../game/actions.js';
 
 const near = [];
 const tmp = { x: 0, y: 0 };
@@ -77,6 +78,9 @@ export class AIController {
     this.threat = null;
     this.thirdT = 0;
     this.engaged = false;
+    this.useGate = true;
+    this.selfUse = false;
+    this.specialHoldT = 0;
     // Personality: each fighter's appetite for a fight varies around its tier's.
     this.aggr = this.tier.aggression * rng.range(0.6, 1.3);
     this.wantFight = false;
@@ -198,6 +202,15 @@ export class AIController {
     const loot = this._findLoot(f, m, armed ? 230 : 360);
     const xpCap = !loot ? this._findXp(f, m, 130) : null;
 
+    // --- lures (decoys) pull most fighters in while they last
+    let lure = null;
+    for (const a of m.areas.pool.active) {
+      if (!a.spec.lure || a.owner === f) continue;
+      if (Math.hypot(a.x - f.x, a.y - f.y) > tier.perception) continue;
+      if (this.lureSeen !== a.born) { this.lureSeen = a.born; this.lureFalls = rng.chance(tier.relic === 'predictive' ? 0.4 : 0.85); }
+      if (this.lureFalls) { lure = a; break; }
+    }
+
     // --- scores
     const h = (s) => (this.state === s ? HYSTERESIS : 0);
     const scores = {
@@ -218,6 +231,7 @@ export class AIController {
       const v = scores[k] + h(k);
       if (v > sv) { sv = v; st = k; }
     }
+    if (lure && !retaliate && zoneU < 1) st = 'LURED';
     this.state = st;
     // Only fight when engaged, retaliating, or (sometimes) when an enemy is right on top of us.
     this.engaged = st === 'ENGAGE' || !!retaliate
@@ -238,6 +252,8 @@ export class AIController {
     } else if (st === 'LOOT') {
       this._goalPoint(f, m, loot.p.x, loot.p.y);
       this.goalItem = loot.p;
+    } else if (st === 'LURED') {
+      this._goalPoint(f, m, lure.x, lure.y);
     } else if (st === 'XP') {
       this._goalPoint(f, m, xpCap.x, xpCap.y);
     } else {
@@ -437,66 +453,166 @@ export class AIController {
       this.dodgeY = this.threat.y;
       this.dodgeT = 0.3;
     }
+    // Telegraphs (beam lines, rings): step out of them.
+    if (!this.threat) {
+      for (const tg of m.telegraphs) {
+        if (tg.owner === f) continue;
+        if (tg.kind === 'line') {
+          const dx = tg.x2 - tg.x;
+          const dy = tg.y2 - tg.y;
+          const l2 = dx * dx + dy * dy || 1;
+          let k = ((f.x - tg.x) * dx + (f.y - tg.y) * dy) / l2;
+          k = k < 0 ? 0 : k > 1 ? 1 : k;
+          const cx = f.x - (tg.x + dx * k);
+          const cy = f.y - (tg.y + dy * k);
+          const dist = Math.hypot(cx, cy);
+          if (dist < tg.w + f.r + 6) {
+            const l = Math.sqrt(l2);
+            let px = -dy / l;
+            let py = dx / l;
+            if (px * cx + py * cy < 0) { px = -px; py = -py; }
+            this.threat = { tti: tg.dur - tg.t, x: px, y: py, incoming: true };
+            break;
+          }
+        } else {
+          const dx = f.x - tg.x;
+          const dy = f.y - tg.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist < tg.r + f.r + 4) { this.threat = { tti: tg.dur - tg.t, x: dx / (dist || 1), y: dy / (dist || 1) }; break; }
+        }
+      }
+      if (this.threat && this.dodgeT <= 0 && this.rng.chance(this.tier.dodge + 0.15)) {
+        this.dodgeX = this.threat.x;
+        this.dodgeY = this.threat.y;
+        this.dodgeT = 0.4;
+      }
+    }
     // Enemy damaging areas: step out.
     this.avoidX = 0;
     this.avoidY = 0;
     const areas = m.areas.pool.active;
     for (let i = 0; i < areas.length; i++) {
       const a = areas[i];
-      if (a.owner === f || (a.dps <= 0 && !a.status)) continue;
+      if (a.owner === f || (a.dps <= 0 && !a.status && !a.spec.explode && !a.spec.trigger)) continue;
+      if (a.spec.hidden && Math.hypot(f.x - a.x, f.y - a.y) > 30) continue; // unseen traps
+      const ar = a.spec.explode ? a.spec.explode.radius : a.r;
       const dx = f.x - a.x;
       const dy = f.y - a.y;
       const d = Math.hypot(dx, dy);
-      if (d < a.r + 8) { this.avoidX += dx / (d || 1); this.avoidY += dy / (d || 1); }
+      if (d < ar + 8) { this.avoidX += dx / (d || 1); this.avoidY += dy / (d || 1); }
     }
   }
 
   /** Decide whether to fire the held item's special this think, from its `ai.specialWhen` hint. */
-  _specials(f, m) {
-    this.wantSpecial = false;
-    const item = heldItem(f);
-    if (!item.def.special || item.cdS > 0) return;
-    const hints = item.def.ai || {};
+  /**
+   * Evaluate an item hint condition (`ai.useWhen` / `ai.specialWhen`). Tier changes how
+   * cleverly relics are timed: random < timed < predictive.
+   */
+  _cond(when, f, m, item, inRange) {
     const t = this.target;
     const tier = this.tier;
+    const rng = this.rng;
     const d = t ? Math.hypot(t.x - f.x, t.y - f.y) : Infinity;
-    const range = itemRange(item);
-    const inRange = t && d <= range * 1.05 && (this.targetVisible || hints.aim === 'lob');
-    let ok = false;
-    switch (hints.specialWhen) {
+    const countNear = (x, y, r) => {
+      let n = 0;
+      m.grid.query(x, y, r, near);
+      for (let i = 0; i < near.length; i++) if (near[i] !== f && near[i].alive) n++;
+      return n;
+    };
+    const rooted = t && (t.statuses.root.t > 0 || t.statuses.stun.t > 0);
+    switch (when) {
+      case 'inRange':
+      case 'lineOfSight':
+        return inRange;
       case 'incoming': {
         const swing = t && d < 30 && t.swingT > 0;
-        ok = (this.threat?.incoming || swing) && this.rng.chance(tier.dodge + 0.1);
-        break;
+        return (this.threat?.incoming || swing) && rng.chance(tier.dodge + 0.1);
       }
-      case 'clustered': {
-        if (!inRange) break;
-        let n = 0;
-        m.grid.query(t.x, t.y, 44, near);
-        for (let i = 0; i < near.length; i++) if (near[i] !== f && near[i].alive) n++;
-        ok = n >= 2 || (tier.relic === 'random' ? this.rng.chance(0.15) : this.rng.chance(0.06));
-        break;
-      }
+      case 'incomingOrClose':
+        return !!this.threat?.incoming || (t && d < 28);
+      case 'clustered':
+        return inRange && (countNear(t.x, t.y, 44) >= 2 || rng.chance(tier.relic === 'random' ? 0.15 : 0.06));
       case 'nearWall': {
-        if (!t || d > 18) break;
+        if (!t || d > 18) return false;
         const ux = (t.x - f.x) / (d || 1);
         const uy = (t.y - f.y) / (d || 1);
-        ok = m.map.isSolidAt(t.x + ux * 18, t.y + uy * 18) || this.rng.chance(0.1);
-        break;
+        return m.map.isSolidAt(t.x + ux * 18, t.y + uy * 18) || rng.chance(0.1);
       }
       case 'targetRooted':
-        ok = inRange && (t.statuses.root.t > 0 || t.statuses.stun.t > 0 || (tier.relic !== 'predictive' && this.rng.chance(0.1)));
-        break;
+        return inRange && (rooted || (tier.relic !== 'predictive' && rng.chance(0.1)));
+      case 'beam': {
+        // Beams go through walls: range matters, sight does not.
+        if (!t || d > itemRange(item)) return false;
+        const slow = Math.hypot(t.vx, t.vy) < 40;
+        if (tier.relic === 'predictive') return rooted || slow || t.activity != null;
+        if (tier.relic === 'timed') return rooted || slow || rng.chance(0.3);
+        return rng.chance(0.4);
+      }
+      case 'net':
+        if (!inRange) return false;
+        if (tier.relic === 'predictive') return countNear(t.x, t.y, 30) >= 2 || this._nearWall(m, t) || t.controller?.target === f || rooted;
+        return rng.chance(tier.relic === 'timed' ? 0.45 : 0.3);
+      case 'sermon':
+        if (!inRange) return false;
+        if (tier.relic === 'predictive') return countNear(t.x, t.y, 48) >= 2 || m.time - t.lastHitTime < 1.5;
+        return rng.chance(tier.relic === 'timed' ? 0.45 : 0.3);
+      case 'gapClose':
+        return t && this.targetVisible && d > 30 && d < 80;
+      case 'nearOwnTrap': {
+        if (!t) return false;
+        for (const a of m.areas.pool.active) {
+          if (a.owner !== f || !a.spec.explode) continue;
+          if (Math.hypot(a.x - t.x, a.y - t.y) < a.spec.explode.radius * 0.8) return true;
+        }
+        return false;
+      }
+      case 'underFire':
+        return !!this.threat?.incoming || (t && d > 50 && t.controller && itemRange(heldItem(t)) > 60 && rng.chance(0.3));
+      case 'coversNearTarget':
+        if (!t) return false;
+        for (const c of m.coversOf(f)) if (Math.hypot((c.tx + 0.5) * 16 - t.x, (c.ty + 0.5) * 16 - t.y) < 80) return true;
+        return false;
+      case 'enemyClose':
+        return t && d < 40;
+      case 'move':
+        return this.state === 'ZONE' || this.state === 'RETREAT' || (this.state === 'ENGAGE' && d > 80);
       case 'lowHp':
-        ok = f.hp / f.maxHp < 0.45;
-        break;
+        return f.hp / f.maxHp < 0.45;
+      case 'random':
+        return inRange && rng.chance(0.25);
       case 'always':
-        ok = true;
-        break;
+        return true;
       default:
-        ok = inRange && this.rng.chance(tier.relic === 'random' ? 0.2 : 0.35);
+        return inRange && rng.chance(tier.relic === 'random' ? 0.2 : 0.35);
     }
-    this.wantSpecial = !!ok && this.reactT <= 0 && (this.engaged || hints.specialWhen === 'incoming');
+  }
+
+  _nearWall(m, t) {
+    for (let k = 0; k < 4; k++) {
+      const a = (k * Math.PI) / 2;
+      if (m.map.isSolidAt(t.x + Math.cos(a) * 18, t.y + Math.sin(a) * 18)) return true;
+    }
+    return false;
+  }
+
+  /** Decide whether to fire the held item's special (and, for self-use items, the primary) this think. */
+  _specials(f, m) {
+    this.wantSpecial = false;
+    this.selfUse = false;
+    const item = heldItem(f);
+    const hints = item.def.ai || {};
+    const t = this.target;
+    const d = t ? Math.hypot(t.x - f.x, t.y - f.y) : Infinity;
+    const range = itemRange(item);
+    const inRange = !!t && d <= range * 1.05 && (this.targetVisible || hints.aim === 'lob' || hints.useWhen === 'beam');
+    // Primary gate for conditional items (relics, traps...); plain weapons just need range.
+    const uw = hints.useWhen || 'inRange';
+    this.useGate = uw === 'inRange' || uw === 'lineOfSight' ? true : !!this._cond(uw, f, m, item, inRange);
+    if (uw === 'lowHp' || uw === 'incomingOrClose' || uw === 'underFire') this.selfUse = this.useGate;
+    if (!item.def.special || item.cdS > 0) return;
+    const ok = this._cond(hints.specialWhen, f, m, item, inRange);
+    const selfish = ['incoming', 'incomingOrClose', 'lowHp', 'move', 'underFire'].includes(hints.specialWhen);
+    this.wantSpecial = !!ok && this.reactT <= 0 && (this.engaged || selfish);
   }
 
   // ---------------------------------------------------------------- actions
@@ -638,7 +754,8 @@ export class AIController {
       // --- use
       const range = itemRange(item) * (it.stance ? 1.15 : 1);
       const reach = hints.idealRange != null && hints.idealRange < 30 ? range + t.r : range * 0.95;
-      const canHit = this.engaged && d <= reach && (this.targetVisible || hints.aim === 'lob') && this.reactT <= 0;
+      const sees = this.targetVisible || hints.aim === 'lob' || hints.useWhen === 'beam';
+      const canHit = this.engaged && d <= reach && sees && this.reactT <= 0 && this.useGate !== false;
       const charging = item.charge >= 0;
       if (charging) {
         const p = item.resolved?.p || {};
@@ -655,7 +772,21 @@ export class AIController {
       if (item.charge >= 0) it.use = false;
     }
 
-    if (this.wantSpecial) { it.specialPressed = true; it.special = true; this.wantSpecial = false; }
+    // Self-use items (tonic, gust, crystal) fire on their own condition, target or not.
+    if (this.selfUse && !it.use && item.charge < 0 && f.swapT <= 0) { it.use = true; it.usePressed = true; this.selfUse = false; }
+    if (this.wantSpecial) {
+      it.specialPressed = true;
+      it.special = true;
+      this.wantSpecial = false;
+      // Charged specials (Thunderclap) are held for a while.
+      if (ACTIONS[item.def.special?.action]?.mode === 'charge') {
+        const sp = item.resolved?.s || {};
+        this.specialHoldT = this.rng.range(sp.minDraw || 0.2, (sp.maxDraw || 0.8) + 0.05);
+      }
+    } else if (this.specialHoldT > 0) {
+      this.specialHoldT -= dt;
+      it.special = this.specialHoldT > 0;
+    }
     if (this.wantDash) {
       it.dash = true;
       it.moveX = this.dashDX;

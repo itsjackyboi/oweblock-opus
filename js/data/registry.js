@@ -22,7 +22,8 @@ export function resolveParams(params, level) {
   const out = {};
   for (const k in params) {
     const v = params[k];
-    if (Array.isArray(v) && v.length && typeof v[0] !== 'object' && typeof v[0] !== 'string') out[k] = P(v, level);
+    if (Array.isArray(v) && v.length && v[0] && typeof v[0] === 'object') out[k] = v.map((o) => resolveParams(o, level));
+    else if (Array.isArray(v) && v.length && typeof v[0] !== 'object' && typeof v[0] !== 'string') out[k] = P(v, level);
     else if (v && typeof v === 'object' && !Array.isArray(v)) out[k] = resolveParams(v, level);
     else out[k] = v;
   }

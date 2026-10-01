@@ -4,6 +4,8 @@
 import { drawText } from './font.js';
 
 const glyphCache = new Map();
+/** Glyph palette: '#' outline, 'c' the item's color, plus a few fixed colors. */
+const GLYPH_COLORS = { '#': '#1a1c2c', w: '#ffffff', g: '#8b93af', l: '#c0cbdc', b: '#8f563b', o: '#fe8b3a', p: '#b55088', r: '#e43b44', u: '#41a6f6' };
 
 function glyphCanvas(def) {
   let c = glyphCache.get(def.id);
@@ -16,7 +18,7 @@ function glyphCanvas(def) {
     for (let x = 0; x < row.length && x < 16; x++) {
       const ch = row[x];
       if (ch === '.') continue;
-      g.fillStyle = ch === '#' ? '#1a1c2c' : def.color || '#ffffff';
+      g.fillStyle = ch === 'c' ? def.color || '#ffffff' : GLYPH_COLORS[ch] || '#ff00ff';
       g.fillRect(x, y, 1, 1);
     }
   });
