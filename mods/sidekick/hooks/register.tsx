@@ -61,12 +61,6 @@ const fallback = (event: string): string => {
 }
 
 let nextId = 1
-let logText = ''
-
-async function trace($: any, what: string, e: any): Promise<void> {
-  logText += `${what} surface=${String(e.surface)} viewport=${JSON.stringify(e.viewport ?? null)}\n`
-  await $.fs.write('/tmp/sidekick-trace.log', logText)
-}
 let queue: string[] = []
 let isBusy = false
 let isOff = false
@@ -90,7 +84,6 @@ async function flush($: any): Promise<void> {
   await update($, isThinking, () => true)
 
   let text = fallback(batch[batch.length - 1] ?? '')
-  let how = 'fallback'
   try {
     const recent = (await read($, lines)).filter(l => !l.isNote).slice(-3).map(l => l.text)
     const prompt =
@@ -106,19 +99,12 @@ async function flush($: any): Promise<void> {
     })
     if (r.isAnswered && r.text.trim() !== '') {
       text = clip(r.text.split('\n')[0], 140)
-      how = 'haiku'
-    } else if (!r.isAnswered) {
-      how = `fallback(${r.reason})`
     }
   } catch {
     // keep the fallback sentence
   }
 
   await push($, text, false)
-  $.ui.status(`Sidekick: ${text}`)
-  $.ui.toast(text, { timeoutMs: 6000 })
-  $.ui.log(`Sidekick: ${text}`)
-  void trace($, `narrated via ${how}: ${text}`, {})
   await update($, isThinking, () => false)
   lastAt = await $.clock.now()
   isBusy = false
@@ -177,7 +163,6 @@ export const register: Register = on => {
       isOff = false
     }
     const opened = await $.ui.open({ id: PANE, title: 'Sidekick' })
-    void trace($, `open isPlaced=${String(opened.isPlaced)}`, {})
     const recent = (await read($, lines)).filter(l => !l.isNote).slice(-10)
     const story =
       recent.length === 0
@@ -225,7 +210,6 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'Pane', requestId: PANE }, async ($, e) => {
-    void trace($, 'render Pane', e)
     const { Box, Text } = $.ui.resolve(e)
     const list = await read($, lines)
     const thinking = await read($, isThinking)
@@ -247,7 +231,6 @@ export const register: Register = on => {
   })
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
-    void trace($, 'render AbovePrompt', e)
     const list = (await read($, lines)).filter(l => !l.isNote)
     const thinking = await read($, isThinking)
     if (isOff || e.props.hasSurvey || (list.length === 0 && !thinking)) {
