@@ -178,11 +178,13 @@ export const register: Register = on => {
     }
     const opened = await $.ui.open({ id: PANE, title: 'Sidekick' })
     void trace($, `open isPlaced=${String(opened.isPlaced)}`, {})
-    const where = opened.isPlaced
-      ? 'in its pane'
-      : `in the line above your prompt and under it (no pane here: ${opened.reason})`
+    const recent = (await read($, lines)).filter(l => !l.isNote).slice(-10)
+    const story =
+      recent.length === 0
+        ? 'Nothing to report yet.'
+        : recent.map(l => `- ${l.text}`).join('\n')
 
-    return { text: `Sidekick is watching, showing up ${where}.` }
+    return { text: `Sidekick says (oldest to newest):\n${story}\n(Run /sidekick again for more. /sidekick off pauses it.)` }
   })
 
   on('prompt.submit', async ($, e, next) => {
