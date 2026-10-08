@@ -10,6 +10,7 @@ test('narrates a tool call through a small model', async ($, on) => {
   })
 
   on('tool.call', () => ({ result: 'ok', text: 'ok' }) as never)
+  on('fs.write', () => ({ value: undefined }) as never)
   on('model.complete', (_$, e) => {
     heard(`${e.model}|${e.prompt}`)
 
