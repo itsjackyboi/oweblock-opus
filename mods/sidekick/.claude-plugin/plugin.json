@@ -1,0 +1,6 @@
+{
+  "name": "sidekick",
+  "version": "0.1.0",
+  "description": "A tiny Haiku sidekick in a pane that narrates what Claude Code is doing, in very short plain-English sentences.",
+  "types": "./types/index.d.ts"
+}
