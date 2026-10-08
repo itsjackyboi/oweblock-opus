@@ -105,6 +105,7 @@ async function flush($: any): Promise<void> {
   }
 
   await push($, text, false)
+  $.ui.status(`Sidekick: ${text}`)
   await update($, isThinking, () => false)
   lastAt = await $.clock.now()
   isBusy = false
