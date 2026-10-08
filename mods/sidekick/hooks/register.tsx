@@ -117,6 +117,7 @@ async function flush($: any): Promise<void> {
   await push($, text, false)
   $.ui.status(`Sidekick: ${text}`)
   $.ui.toast(text, { timeoutMs: 6000 })
+  $.ui.log(`Sidekick: ${text}`)
   void trace($, `narrated via ${how}: ${text}`, {})
   await update($, isThinking, () => false)
   lastAt = await $.clock.now()
