@@ -162,9 +162,12 @@ export const register: Register = on => {
     if (arg === 'on') {
       isOff = false
     }
-    await $.ui.open({ id: PANE, title: 'Sidekick' })
+    const opened = await $.ui.open({ id: PANE, title: 'Sidekick' })
+    const where = opened.isPlaced
+      ? 'in its pane'
+      : `in the line above your prompt and under it (no pane here: ${opened.reason})`
 
-    return { text: 'Sidekick is watching.' }
+    return { text: `Sidekick is watching, showing up ${where}.` }
   })
 
   on('prompt.submit', async ($, e, next) => {
@@ -221,6 +224,23 @@ export const register: Register = on => {
           </Text>
         ))}
         {thinking && <Text dimColor>...</Text>}
+      </Box>
+    )
+  })
+
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    const list = (await read($, lines)).filter(l => !l.isNote)
+    const thinking = await read($, isThinking)
+    if (isOff || e.props.hasSurvey || (list.length === 0 && !thinking)) {
+      return next(e)
+    }
+
+    const { Box, Text } = $.ui.resolve(e)
+    const last = list[list.length - 1]
+
+    return (
+      <Box>
+        <Text dimColor>Sidekick: {last === undefined ? '' : last.text}{thinking ? ' ...' : ''}</Text>
       </Box>
     )
   })
